@@ -14,7 +14,8 @@ describe("simulation", () => {
   it("nobody starves on day one while the fridge works", () => {
     for (let seed = 1; seed <= 15; seed++) {
       const w = runWorld(seed, 1);
-      if (w.objects.find((o) => o.type === "fridge")!.destroyed) continue; // fire got it: starving is fair
+      const fridgeWentDown = w.events.some((e) => (e.kind === "destroyed" || e.kind === "accident") && e.text.includes("fridge"));
+      if (fridgeWentDown) continue; // burnt or toppled at some point: starving is fair
       expect(w.deaths.starved ?? 0).toBe(0);
     }
   });
@@ -70,12 +71,90 @@ describe("simulation", () => {
     expect(launches).toBeGreaterThan(0);
   });
 
+  it("wetting yourself leaves a puddle and embarrassment", () => {
+    const w = new World(1);
+    const s = w.addSim("flirty")!;
+    s.needs.bladder = 0.01;
+    w.tick();
+    expect(w.puddles.length).toBe(1);
+    expect(w.hasBuff(s, "embarrassed")).toBe(true);
+  });
+
+  it("puddles make people slip, and sometimes it's fatal", () => {
+    let slips = 0, deaths = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      const w = new World(seed);
+      const s = w.addSim("foodie", { x: 300, floor: 0 })!;
+      w.addPuddle(250, 0);
+      w.objects.find((o) => o.type === "fridge")!.x = 200; // give them a reason to walk over it
+      s.needs.hunger = 5;
+      w.events.length = 0;
+      for (let i = 0; i < 40; i++) w.tick();
+      if (w.events.some((e) => e.kind === "accident")) slips++;
+      if (s.cause === "slipped") deaths++;
+    }
+    expect(slips).toBeGreaterThan(50);
+    expect(deaths).toBeGreaterThan(0);
+    expect(deaths).toBeLessThan(slips / 4);
+  });
+
+  it("the fridge can fall on someone and break", () => {
+    let crushed = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const w = runWorld(seed, 6, ["foodie", "foodie", "foodie"]);
+      if (w.deaths.crushed) {
+        crushed++;
+        const fridge = w.objects.find((o) => o.type === "fridge")!;
+        expect(fridge.broken || fridge.destroyed || w.events.some((e) => e.kind === "repair")).toBe(true);
+      }
+    }
+    expect(crushed).toBeGreaterThan(0);
+  });
+
+  it("sims eventually repair broken things themselves", () => {
+    let fixedHouses = 0;
+    for (let seed = 1; seed <= 10; seed++) {
+      const w = runWorld(seed, 0, undefined, (w) => {
+        w.objects.find((o) => o.type === "toilet")!.broken = true;
+      });
+      for (let i = 0; i < 1440 && w.objects.find((o) => o.type === "toilet")!.broken; i++) w.tick();
+      if (!w.objects.find((o) => o.type === "toilet")!.broken) fixedHouses++;
+    }
+    expect(fixedHouses).toBeGreaterThan(5);
+  });
+
+  it("anyone can die of loneliness, not just clingy sims", () => {
+    const w = new World(1);
+    const s = w.addSim("asshole")!;
+    s.needs.social = 0;
+    s.needs.hunger = 20; // no health regen
+    s.health = 0.02;
+    w.tick();
+    expect(s.cause).toBe("loneliness");
+  });
+
   it("fire burns objects next to it", () => {
     const w = new World(1);
     const stove = w.objects.find((o) => o.type === "stove")!;
     w.startFire(stove.x, stove.floor);
     for (let i = 0; i < 60; i++) w.tick();
     expect(stove.burn).toBeGreaterThan(0);
+  });
+});
+
+describe("chaos slider", () => {
+  it("calm < normal < chaos in deaths", () => {
+    const deaths = (level: "calm" | "normal" | "chaos") => {
+      let n = 0;
+      for (let seed = 1; seed <= 15; seed++) {
+        const w = runWorld(seed, 3, ["asshole", "flirty", "foodie", "clingy", "asshole", "flirty", "foodie", "clingy"], undefined, level);
+        n += w.graveyard.length + w.sims.filter((s) => !s.alive).length;
+      }
+      return n;
+    };
+    const calm = deaths("calm"), normal = deaths("normal"), chaos = deaths("chaos");
+    expect(calm).toBeLessThan(normal);
+    expect(normal).toBeLessThan(chaos);
   });
 });
 

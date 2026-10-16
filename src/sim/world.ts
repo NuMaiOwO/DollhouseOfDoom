@@ -1,6 +1,7 @@
 import { DEATHS } from "../data/deaths";
 import { INTERACTION_BY_ID } from "../data/interactions";
 import { pickName } from "../data/names";
+import { DANGER, type ChaosLevel, type Danger } from "../data/tuning";
 import { PERSONALITIES, PERSONALITY_IDS } from "../data/personalities";
 import { acceptChance, canEngage, chooseAction } from "./autonomy";
 import { CLIMB_MINUTES, DOOR_X, FLOORS, HOUSE_WIDTH, LADDER_X, RUN_SPEED, WALK_SPEED, furnish } from "./house";
@@ -8,7 +9,7 @@ import { clamp, createRng, type Rng } from "./rng";
 import {
   NEEDS,
   type Action, type BuffId, type DeathCause, type Fire, type HouseObject, type LifeStage,
-  type ObjectType, type PersonalityId, type Place, type Relationship, type Sim, type SimEvent,
+  type ObjectType, type PersonalityId, type Place, type Puddle, type Relationship, type Sim, type SimEvent,
 } from "./types";
 
 export const DAY = 1440;
@@ -23,11 +24,14 @@ const MAX_FIRES = 14;
  */
 export class World {
   t = 8 * 60;
+  /** How accident-prone the house is (the Chaos slider). */
+  chaos: ChaosLevel = "normal";
   readonly rng: Rng;
   sims: Sim[] = [];
   graveyard: Sim[] = [];
   objects: HouseObject[] = [];
   fires: Fire[] = [];
+  puddles: Puddle[] = [];
   births = 0;
   firesStarted = 0;
   deaths: Partial<Record<DeathCause, number>> = {};
@@ -40,6 +44,8 @@ export class World {
     this.rng = createRng(seed);
     furnish(this);
   }
+
+  get danger(): Danger { return DANGER[this.chaos]; }
 
   get day() { return Math.floor(this.t / DAY) + 1; }
   get hour() { return Math.floor((this.t % DAY) / 60); }
@@ -83,7 +89,7 @@ export class World {
       climb: null,
       needs: { hunger: this.rng.range(55, 85), energy: this.rng.range(55, 90), social: this.rng.range(40, 80), bladder: this.rng.range(50, 90) },
       health: 100,
-      ageMin: opts.ageMin ?? this.rng.range(ADULT_AT, ADULT_AT + 1500),
+      ageMin: opts.ageMin ?? this.rng.range(ADULT_AT, ADULT_AT + 600), // move-ins are young adults
       lifespanMin: this.rng.range(4.5 * DAY, 5.5 * DAY),
       alive: true,
       action: null,
@@ -92,6 +98,7 @@ export class World {
       generation: opts.generation ?? 1,
       mateCooldownUntil: 0,
       passedOut: false,
+      puddleId: null,
       considered: [],
     };
     this.sims.push(s);
@@ -280,11 +287,59 @@ export class World {
     if (fixed.length) this.emit({ kind: "info", icon: "🛠️", text: `Repaired or replaced ${fixed.length} object(s).` });
   }
 
+  /** A Sim managed to fix something. */
+  repair(o: HouseObject, by: Sim) {
+    o.destroyed = false;
+    o.broken = false;
+    o.burn = 0;
+    this.emit({ kind: "repair", icon: "🛠️", text: `${by.name} actually fixed the ${o.type}!`, simId: by.id, at: { x: o.x, floor: o.floor } });
+  }
+
+  addPuddle(x: number, floor: number) {
+    if (this.puddles.length >= 12 || this.puddles.some((p) => p.floor === floor && Math.abs(p.x - x) < 14)) return;
+    this.puddles.push({ id: this.nextId++, x: clamp(x, 8, HOUSE_WIDTH - 8), floor, age: 0, life: this.rng.range(8 * 60, 14 * 60) });
+  }
+
+  /** Walking over a puddle: usually a slip, occasionally a fatal one. */
+  private checkSlip(s: Sim): boolean {
+    const p = this.puddles.find((p) => p.floor === s.floor && Math.abs(p.x - s.x) < 10);
+    if (!p) {
+      s.puddleId = null;
+      return false;
+    }
+    if (s.puddleId === p.id) return false;
+    s.puddleId = p.id;
+    const running = s.action?.run;
+    if (!this.rng.chance(Math.min(0.95, this.danger.slip * (running ? 1.5 : 1)))) return false;
+    this.endAction(s);
+    this.emit({ kind: "accident", icon: "💫", minor: true, text: `${s.name} slipped in a puddle.`, simId: s.id, at: this.placeOf(s) });
+    if (this.rng.chance(this.danger.fatalSlip * (this.isElder(s) ? 2.5 : 1))) {
+      const landing = { x: clamp(s.x + s.facing * 34, 10, HOUSE_WIDTH - 10), floor: s.floor };
+      s.action = { interactionId: "fatal_slip", target: { kind: "spot", id: 0 }, dest: landing, phase: "doing", elapsed: 0, duration: 14 };
+      return true;
+    }
+    this.damage(s, this.rng.range(4, 12), "slipped");
+    if (s.alive) s.action = { interactionId: "slipped", target: { kind: "spot", id: 0 }, dest: this.placeOf(s), phase: "doing", elapsed: 0, duration: 12 };
+    return true;
+  }
+
+  /** The fridge tips over onto whoever is raiding it. */
+  private crush(s: Sim, fridge: HouseObject) {
+    fridge.broken = true;
+    fridge.userId = null;
+    this.emit({ kind: "accident", icon: "🧊", text: `The fridge fell on ${s.name}!`, simId: s.id, at: this.placeOf(s) });
+    this.kill(s, "crushed");
+  }
+
   /** The toilet explodes: whoever is on it (and anyone standing too close) goes through the roof. */
   launch(s: Sim, toilet: HouseObject) {
     toilet.broken = true;
     toilet.userId = null;
-    const victims = [s, ...this.living.filter((o) => o !== s && !o.climb && o.floor === toilet.floor && Math.abs(o.x - toilet.x) < 24)];
+    this.addPuddle(toilet.x + 20, toilet.floor);
+    this.addPuddle(toilet.x - 20, toilet.floor);
+    // Sometimes it takes one unlucky bystander along too.
+    const nearby = this.living.filter((o) => o !== s && !o.climb && o.floor === toilet.floor && Math.abs(o.x - toilet.x) < 24);
+    const victims = nearby.length && this.rng.chance(0.5) ? [s, this.rng.pick(nearby)] : [s];
     for (const v of victims) {
       this.endAction(v);
       v.passedOut = false;
@@ -296,7 +351,14 @@ export class World {
     this.emit({ kind: "geyser", icon: "🚽", text: `The toilet exploded and launched ${names} into the sky!`, simId: s.id, at: { x: toilet.x, floor: toilet.floor } });
   }
 
-  /** Player lever: cheap stoves catch fire three times as often. */
+  /** Player lever: the Chaos slider. */
+  setChaos(level: ChaosLevel) {
+    if (level === this.chaos) return;
+    this.chaos = level;
+    this.emit({ kind: "info", icon: level === "chaos" ? "🔥" : level === "calm" ? "😌" : "🙂", text: `Chaos level set to ${level}.` });
+  }
+
+  /** Player lever: cheap stoves catch fire more often. */
   setStoveQuality(quality: "cheap" | "normal") {
     for (const o of this.objects) if (o.type === "stove") o.quality = quality;
   }
@@ -313,6 +375,8 @@ export class World {
       else this.startAction(s, chooseAction(this, s));
     }
     this.updateFires();
+    for (const p of this.puddles) p.age++;
+    this.puddles = this.puddles.filter((p) => p.age < p.life);
     this.buryCorpses();
   }
 
@@ -325,20 +389,21 @@ export class World {
     decay("hunger", asleep ? 0.05 : 0.1);
     if (!asleep) decay("energy", 0.07);
     decay("social", asleep ? 0.03 : 0.08);
-    decay("bladder", asleep ? 0.06 : 0.15);
+    decay("bladder", asleep ? 0.04 : 0.1);
     s.ageMin++;
     s.buffs = s.buffs.filter((b) => b.until > this.t);
 
-    if (s.needs.hunger <= 0) this.damage(s, 0.12, "starved");
+    if (s.needs.hunger <= 0) this.damage(s, 0.08, "starved");
     else if (s.needs.hunger > 30 && s.health < 100) s.health = Math.min(100, s.health + 0.05);
-    if (s.personality === "clingy" && s.needs.social <= 0) this.damage(s, 0.06, "loneliness");
+    if (s.needs.social <= 0) this.damage(s, s.personality === "clingy" ? 0.06 : 0.03, "loneliness");
     if (!s.alive) return;
     if (s.ageMin >= s.lifespanMin) return this.kill(s, "old_age");
-    if (s.action?.interactionId === "launched") return;
+    if (s.action?.interactionId === "launched" || s.action?.interactionId === "fatal_slip") return;
     if (s.needs.energy <= 0 && !s.passedOut && !asleep) this.passOut(s);
     if (s.needs.bladder <= 0) {
       s.needs.bladder = 100;
-      this.addBuff(s, "embarrassed", 240);
+      this.addBuff(s, "embarrassed", 8 * 60);
+      this.addPuddle(s.x, s.climb ? s.climb.from : s.floor);
       this.emit({ kind: "info", icon: "💦", minor: true, text: `${s.name} wet themselves.`, simId: s.id });
     }
   }
@@ -354,7 +419,7 @@ export class World {
   private reactToFire(s: Sim) {
     if (s.climb || s.passedOut) return;
     const id = s.action?.interactionId;
-    if (id === "flee" || id === "extinguish" || id === "launched") return;
+    if (id === "flee" || id === "extinguish" || id === "launched" || id === "fatal_slip" || id === "slipped") return;
     const asleep = this.isAsleep(s);
     const range = asleep ? 40 : 140;
     let fire: Fire | undefined, best = range;
@@ -407,7 +472,8 @@ export class World {
     }
     const other = a.target.kind === "sim" ? this.simById(a.target.id) : undefined;
     const object = a.target.kind === "object" ? this.objectById(a.target.id) : undefined;
-    if ((a.target.kind === "sim" && !other?.alive) || object?.destroyed || object?.broken) return this.endAction(s);
+    if ((a.target.kind === "sim" && !other?.alive) ) return this.endAction(s);
+    if (object && (object.destroyed || object.broken) !== !!def.targetsBroken) return this.endAction(s);
 
     for (const k of NEEDS) {
       const g = def.gains?.[k];
@@ -418,11 +484,12 @@ export class World {
 
     for (const h of def.hazards ?? []) {
       const p = PERSONALITIES[s.personality];
-      let chance = (h.chancePerUse / def.duration) * (p.hazard?.[h.id] ?? 1);
-      if (object?.quality === "cheap") chance *= h.cheapMultiplier ?? 1;
-      if (h.id === "choke" && this.isElder(s)) chance *= 2;
+      const d = this.danger;
+      const perUse = { crush: d.fridgeFall, geyser: d.toiletExplode, fire: d.stoveFire }[h.id];
+      let chance = (perUse / def.duration) * (p.hazard?.[h.id] ?? 1);
+      if (h.id === "fire" && object?.quality === "cheap") chance *= d.cheapStove;
       if (!this.rng.chance(chance)) continue;
-      if (h.id === "choke") return this.kill(s, "choked");
+      if (h.id === "crush" && object) return this.crush(s, object);
       if (h.id === "geyser" && object) return this.launch(s, object);
       if (h.id === "fire" && object) {
         this.startFire(object.x, object.floor, s, object.type);
@@ -513,9 +580,11 @@ export class World {
     if (dx !== 0) s.facing = dx > 0 ? 1 : -1;
     if (Math.abs(dx) > speed) {
       s.x += Math.sign(dx) * speed;
+      this.checkSlip(s);
       return false;
     }
     s.x = goal;
+    if (this.checkSlip(s)) return false;
     if (s.floor !== dest.floor) {
       s.climb = { from: s.floor, to: s.floor + Math.sign(dest.floor - s.floor), progress: 0 };
       return false;

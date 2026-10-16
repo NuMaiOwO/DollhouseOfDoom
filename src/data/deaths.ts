@@ -22,11 +22,17 @@ export const DEATHS: Record<DeathCause, DeathInfo> = {
     hint: "Cheap stoves are a bargain.",
     epitaphs: ["Well done.", "Finally warm.", "Should have bought the good stove."],
   },
-  choked: {
-    title: "Death by Snack",
-    verb: "choked on a snack.",
-    hint: "Some people eat too much, too fast.",
-    epitaphs: ["Loved snacks. Snacks did not love them back.", "One more bite."],
+  crushed: {
+    title: "Crushed by Fridge",
+    verb: "was crushed by the fridge.",
+    hint: "Don't rock the fridge.",
+    epitaphs: ["Wanted a midnight snack. Got the whole fridge.", "Pinned by their appetite."],
+  },
+  slipped: {
+    title: "Slipped in a Puddle",
+    verb: "slipped in a puddle and cracked their head.",
+    hint: "Someone should really mop that up.",
+    epitaphs: ["Didn't watch their step.", "Slipped away. Then hit the floor."],
   },
   beaten: {
     title: "Beaten to Death",

@@ -12,7 +12,7 @@ export const SIM_SIZE = { adult: { w: 16, h: 32 }, child: { w: 12, h: 22 } };
 
 /** Every animation the artist needs to draw (one sprite-sheet row each). */
 export const SIM_ANIMS: AnimState[] = [
-  "idle", "walk", "climb", "eat", "cook", "sleep", "talk", "flirt", "fight", "mate", "panic", "extinguish", "launched", "dead",
+  "idle", "walk", "climb", "eat", "cook", "sleep", "talk", "flirt", "fight", "mate", "panic", "extinguish", "launched", "airborne", "fallen", "repair", "dead",
 ];
 
 export const OBJECT_VISUALS: Record<ObjectType, VisualSpec> = {
@@ -33,4 +33,5 @@ export const COLORS = {
   burnt: 0x262222,
   selected: 0xffe66d,
   water: 0x5fc4ff,
+  puddle: 0xe8e27a,
 };

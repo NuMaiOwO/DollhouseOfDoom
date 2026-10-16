@@ -11,6 +11,7 @@ npm run dev          # play at http://localhost:5173  (add ?seed=123 to replay a
 npm test             # headless simulation tests
 npm run simulate     # balance report: npm run simulate -- [runs] [days] [cast]
                      #   e.g. npm run simulate -- 50 6 asshole,asshole,flirty
+npm run balance      # check every Chaos level against the agreed death-rate targets
 npm run build        # itch.io build in dist/ (zip the contents, upload as HTML game)
 npm run screenshot   # headless Edge screenshots of the running game
 ```
@@ -28,10 +29,15 @@ src/data/     the content: add features here, not in the AI code
   personalities.ts  personality = bundle of tag multipliers
   modifiers.ts      desire rules (hate, love, anger, grief, decency...)
   deaths.ts         death codex entries + epitaphs
+  tuning.ts         ALL accident odds, per Chaos level (Calm / Normal / Chaos) + the targets
 src/render/   Phaser greybox renderer; only reads sim state
   visuals.ts    visual registry: set `sprite` to swap a placeholder for real art
 src/ui/       DOM HUD: controls, inspector, log, codex, graveyard
 ```
+
+**Changing how deadly things are:** edit `src/data/tuning.ts`, then run `npm run balance`.
+Normal must hit: a death every 2–3 real minutes in a busy (8-Sim) house, grandkids in most houses,
+and object accidents ahead of beatings.
 
 **Adding a personality:** add an entry in `personalities.ts` with tag multipliers.
 **Adding an interaction:** add it to `interactions.ts` with tags; existing rules apply automatically.

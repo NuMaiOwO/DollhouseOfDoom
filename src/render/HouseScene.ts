@@ -44,6 +44,7 @@ export class HouseScene extends Phaser.Scene {
   private objects = new Map<number, ObjectView>();
   private fires = new Map<number, Phaser.GameObjects.Rectangle[]>();
   private water!: Phaser.GameObjects.Graphics;
+  private puddles!: Phaser.GameObjects.Graphics;
 
   constructor(readonly world: World) {
     super("house");
@@ -57,6 +58,7 @@ export class HouseScene extends Phaser.Scene {
     this.drawHouse();
     for (const o of this.world.objects) this.objects.set(o.id, this.makeObject(o));
     this.water = this.add.graphics().setDepth(12);
+    this.puddles = this.add.graphics().setDepth(4);
     this.world.on((e) => this.popup(e));
     this.input.on("pointerdown", (_p: Phaser.Input.Pointer, hit: Phaser.GameObjects.GameObject[]) => {
       if (!hit.length) this.select(null);
@@ -83,6 +85,7 @@ export class HouseScene extends Phaser.Scene {
     this.syncObjects();
     this.syncFires();
     this.drawWater();
+    this.drawPuddles();
   }
 
   // ── House ─────────────────────────────────────────────────
@@ -161,8 +164,8 @@ export class HouseScene extends Phaser.Scene {
         if (bed) ty -= OBJECT_VISUALS[bed.type].placeholder.h;
       }
       const k = Math.min(1, dt * 12);
-      if (anim === "launched") {
-        const pos = this.launchPosition(s);
+      if (anim === "launched" || anim === "airborne") {
+        const pos = anim === "launched" ? this.launchPosition(s) : this.slipPosition(s);
         v.root.setPosition(pos.x, pos.y);
       } else {
         v.root.x += (tx - v.root.x) * k;
@@ -173,6 +176,7 @@ export class HouseScene extends Phaser.Scene {
       v.body.setSize(size.w, size.h).setDisplaySize(size.w, size.h);
       v.body.setFillStyle(s.alive ? PERSONALITIES[s.personality].color : COLORS.dead);
       v.body.setStrokeStyle(s.id === this.selectedId ? 2 : 1, s.id === this.selectedId ? COLORS.selected : 0x111111);
+      v.body.setOrigin(0.5, 1);
       v.body.y = 0;
       v.body.angle = 0;
       v.body.scaleY = 1;
@@ -195,9 +199,20 @@ export class HouseScene extends Phaser.Scene {
         case "extinguish": v.body.angle = s.facing * 10; break;
         case "sleep": v.body.angle = -90 * s.facing; v.eye.setVisible(false); break;
         case "launched": v.body.angle = this.launchProgress(s) > 0.55 ? t * 900 : Math.sin(t * 50) * 8; break;
+        case "airborne": {
+          // spin around the middle of the body: feet fly forward, head goes back
+          v.body.setOrigin(0.5, 0.5);
+          v.body.y = -size.h / 2;
+          v.body.angle = -s.facing * this.launchProgress(s) * 1080;
+          v.eye.setVisible(false);
+          break;
+        }
+        case "fallen": v.body.angle = 90 * s.facing; v.eye.setVisible(false); break;
+        case "repair": v.body.angle = s.facing * (8 + Math.sin(t * 14) * 6); v.body.y = -Math.abs(Math.sin(t * 14)); break;
         case "dead": v.body.angle = 90; v.eye.setVisible(false); break;
       }
-      if (anim === "sleep" || anim === "dead") {
+      if (anim === "sleep" || anim === "dead" || anim === "fallen") {
+        v.body.y = -size.w / 2; // rotated around the feet: lift back onto the floor
         v.name.setY(-size.w - 4);
         v.thought.setY(-size.w - 15);
       }
@@ -237,6 +252,13 @@ export class HouseScene extends Phaser.Scene {
     return { x: Phaser.Math.Linear(startX, landX, k), y: Phaser.Math.Linear(sky, ground, k) };
   }
 
+  /** Feet out, three flips through the air, and a hard landing a little further on. */
+  private slipPosition(s: Sim) {
+    const p = this.launchProgress(s);
+    const height = 70 * Math.sin(Math.PI * Math.min(1, p * 1.15)); // up fast, slam down at the end
+    return { x: Phaser.Math.Linear(sx(s.x), sx(s.action!.dest.x), p), y: floorY(s.floor) - Math.max(0, height) };
+  }
+
   private drawWater() {
     const g = this.water.clear();
     const t = this.time.now / 1000;
@@ -250,13 +272,27 @@ export class HouseScene extends Phaser.Scene {
       g.fillStyle(COLORS.water, 0.85).fillRect(x - 6 + Math.sin(t * 40) * 1.5, top, 12, floorY(s.floor) - 20 - top);
       g.fillStyle(0xffffff, 0.6).fillRect(x - 2, top, 4, floorY(s.floor) - 20 - top);
     }
-    // broken toilets keep spraying until repaired
+    // broken toilets keep spraying until repaired; anything else broken smokes and sparks
     for (const o of this.world.objects) {
       if (!o.broken) continue;
+      if (o.type !== "toilet") {
+        this.brokenSmoke(o);
+        continue;
+      }
       const h = 18 + Math.sin(t * 13) * 6 + Math.random() * 4;
       const top = floorY(o.floor) - OBJECT_VISUALS[o.type].placeholder.h - h;
       g.fillStyle(COLORS.water, 0.8).fillRect(sx(o.x) - 3, top, 6, h);
       g.fillStyle(COLORS.water, 0.6).fillCircle(sx(o.x) - 6, top + 2 + Math.random() * 3, 2).fillCircle(sx(o.x) + 6, top + 2 + Math.random() * 3, 2);
+    }
+  }
+
+  // ── Puddles ───────────────────────────────────────────────
+
+  private drawPuddles() {
+    const g = this.puddles.clear();
+    for (const p of this.world.puddles) {
+      const fresh = 1 - p.age / p.life; // shrinks and fades as it dries
+      g.fillStyle(COLORS.puddle, 0.35 + 0.45 * fresh).fillEllipse(sx(p.x), floorY(p.floor) + 1, 10 + 18 * fresh, 4);
     }
   }
 
@@ -280,6 +316,10 @@ export class HouseScene extends Phaser.Scene {
       const p = OBJECT_VISUALS[o.type].placeholder;
       const name = o.destroyed ? `BURNT ${p.label}` : o.broken ? `BROKEN ${p.label}` : o.type === "stove" && o.quality === "cheap" ? `${p.label} ($)` : p.label;
       v.label.setText(name);
+      const toppled = o.type === "fridge" && o.broken;
+      v.body.angle = toppled ? -90 : 0;
+      v.body.y = toppled ? -OBJECT_VISUALS[o.type].placeholder.w / 2 : 0;
+      v.label.setY(toppled ? -OBJECT_VISUALS[o.type].placeholder.w - 2 : -p.h - 2);
       if (v.body instanceof Phaser.GameObjects.Rectangle) {
         const scorched = Phaser.Display.Color.Interpolate.ColorWithColor(
           Phaser.Display.Color.ValueToColor(p.color), Phaser.Display.Color.ValueToColor(COLORS.burnt), 50, Math.min(50, o.burn),
@@ -315,6 +355,21 @@ export class HouseScene extends Phaser.Scene {
     return [0xd8361e, 0xff8a1e, 0xffd84a].map((c) => this.add.rectangle(sx(f.x), floorY(f.floor), 14, 20, c).setOrigin(0.5, 1).setDepth(15));
   }
 
+  /** A thin wisp of smoke and the odd spark from a broken appliance. */
+  private brokenSmoke(o: HouseObject) {
+    const p = OBJECT_VISUALS[o.type].placeholder;
+    const toppled = o.type === "fridge";
+    const top = floorY(o.floor) - (toppled ? p.w : p.h);
+    if (Math.random() < 0.03) this.smoke(sx(o.x) + (toppled ? -p.h / 2 : 0), top);
+    if (Math.random() < 0.015) {
+      const spark = this.add.rectangle(sx(o.x) + Phaser.Math.Between(-8, 8), top + 4, 3, 3, 0xfff176).setDepth(16);
+      this.tweens.add({
+        targets: spark, x: spark.x + Phaser.Math.Between(-12, 12), y: spark.y - Phaser.Math.Between(6, 16), alpha: 0,
+        duration: 350, onComplete: () => spark.destroy(),
+      });
+    }
+  }
+
   private smoke(x: number, y: number) {
     const puff = this.add.rectangle(x + Phaser.Math.Between(-6, 6), y, 6, 6, 0x555555).setDepth(16).setAlpha(0.7);
     this.tweens.add({ targets: puff, y: y - 40, alpha: 0, scale: 2, duration: 1400, onComplete: () => puff.destroy() });
@@ -324,7 +379,8 @@ export class HouseScene extends Phaser.Scene {
 
   private popup(e: SimEvent) {
     if (e.kind === "geyser") this.cameras.main.shake(250, 0.006);
-    if (e.kind === "death" && e.cause === "toilet") {
+    if (e.kind === "death" && e.cause === "crushed") this.cameras.main.shake(300, 0.012);
+    if (e.kind === "death" && (e.cause === "toilet" || e.cause === "slipped")) {
       this.cameras.main.shake(350, 0.015);
       if (e.at) {
         const boom = this.add.text(sx(e.at.x), floorY(e.at.floor) - 10, "💥", { fontSize: "34px" }).setOrigin(0.5).setDepth(31);

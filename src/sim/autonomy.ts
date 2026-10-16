@@ -1,4 +1,4 @@
-import { INTERACTIONS } from "../data/interactions";
+import { INTERACTIONS, OBJECT_NEED } from "../data/interactions";
 import { DESIRE_RULES } from "../data/modifiers";
 import { PERSONALITIES } from "../data/personalities";
 import { FLOORS, HOUSE_WIDTH, LADDER_X } from "./house";
@@ -54,7 +54,9 @@ export function isAvailable(c: Ctx): boolean {
   const { world: w, sim: s, def, object: o, other } = c;
   if (def.adultsOnly && !w.isAdult(s)) return false;
   if (o) {
-    if (o.destroyed || o.broken || (o.userId !== null && o.userId !== s.id)) return false;
+    const unusable = o.destroyed || o.broken;
+    if (def.targetsBroken ? !unusable : unusable) return false;
+    if (o.userId !== null && o.userId !== s.id) return false;
     if (w.fires.some((f) => f.floor === o.floor && Math.abs(f.x - o.x) < 40)) return false;
   }
   if (other) {
@@ -69,7 +71,7 @@ export function canEngage(w: World, t: Sim): boolean {
   if (!t.alive || t.passedOut || w.isAsleep(t)) return false;
   const a = t.action;
   if (!a) return true;
-  if (a.passive || a.interactionId === "flee" || a.interactionId === "extinguish" || a.interactionId === "launched") return false;
+  if (a.passive || a.interactionId === "flee" || a.interactionId === "extinguish" || a.interactionId === "launched" || a.interactionId === "fatal_slip") return false;
   return !(a.target.kind === "sim" && a.phase === "doing");
 }
 
@@ -86,6 +88,7 @@ export function desire(c: Ctx): number {
     if (!g) continue;
     score += (urgency(s.needs[k]) * Math.min(g, 100 - s.needs[k])) / 10;
   }
+  if (def.targetsBroken && c.object) score += urgency(s.needs[OBJECT_NEED[c.object.type]]) * 1.5;
   for (const rule of DESIRE_RULES) {
     if (rule.applies(c)) score *= typeof rule.multiply === "function" ? rule.multiply(c) : rule.multiply;
   }
@@ -100,12 +103,13 @@ export function acceptChance(w: World, actor: Sim, target: Sim, def: Interaction
   const r = w.rel(target, actor);
   let p = 0.55 + r.friendship / 150;
   if (def.tags.includes("romantic")) p = 0.25 + r.romance / 100 + r.friendship / 300;
-  if (def.id === "mate") p = r.romance >= 40 ? 0.5 + r.romance / 200 : 0.03;
+  if (def.id === "mate") p = r.romance >= 30 ? 0.5 + r.romance / 200 : 0.03;
   const tp = PERSONALITIES[target.personality];
   for (const tag of def.tags) p *= tp.acceptTag?.[tag] ?? 1;
   if (w.hasBuff(target, "angry") && def.tags.includes("friendly")) p *= 0.3;
   if ((w.hasBuff(target, "grieving") || w.hasBuff(target, "heartbroken")) && def.tags.includes("romantic")) p *= 0.2;
   if (target.needs.hunger < 15 || target.needs.energy < 10) p *= 0.3;
+  if (w.hasBuff(target, "embarrassed")) p *= 0.3;
   return clamp(p, 0.02, 0.97);
 }
 

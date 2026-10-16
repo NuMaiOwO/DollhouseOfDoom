@@ -1,4 +1,9 @@
-import type { InteractionDef, Sim } from "../sim/types";
+import type { InteractionDef, NeedKey, ObjectType, Sim } from "../sim/types";
+
+/** Which need an object serves. Sims are keener to repair what they need. */
+export const OBJECT_NEED: Record<ObjectType, NeedKey> = {
+  fridge: "hunger", stove: "hunger", toilet: "bladder", bed: "energy", couch: "energy",
+};
 
 /**
  * Everything a Sim can do. Objects and other Sims "advertise" these;
@@ -11,13 +16,13 @@ export const INTERACTIONS: InteractionDef[] = [
     id: "snack", label: "Grab a snack", emoji: "🍎", anim: "eat",
     target: "object", objectTypes: ["fridge"], tags: ["food"],
     duration: 10, gains: { hunger: 30 },
-    hazards: [{ id: "choke", chancePerUse: 0.004 }],
+    hazards: [{ id: "crush" }],
   },
   {
     id: "cook", label: "Cook a meal", emoji: "🍳", anim: "cook",
     target: "object", objectTypes: ["stove"], tags: ["food", "cooking"],
     duration: 40, gains: { hunger: 65 },
-    hazards: [{ id: "fire", chancePerUse: 0.03, cheapMultiplier: 3 }],
+    hazards: [{ id: "fire" }],
   },
   {
     id: "sleep", label: "Sleep", emoji: "💤", anim: "sleep",
@@ -34,7 +39,17 @@ export const INTERACTIONS: InteractionDef[] = [
     id: "use_toilet", label: "Use the toilet", emoji: "🚽", anim: "idle",
     target: "object", objectTypes: ["toilet"], tags: ["toilet"],
     duration: 8, gains: { bladder: 100 },
-    hazards: [{ id: "geyser", chancePerUse: 0.15 }],
+    hazards: [{ id: "geyser" }],
+  },
+  {
+    id: "repair", label: "Try to fix", emoji: "🔧", anim: "repair",
+    target: "object", objectTypes: ["fridge", "stove", "toilet", "bed", "couch"], tags: ["repair"],
+    duration: 30, baseDesire: 0.5, adultsOnly: true, targetsBroken: true,
+    onComplete: ({ world: w, sim: s, object: o }) => {
+      if (!o) return;
+      if (w.rng.chance(w.danger.repairSuccess)) return w.repair(o, s);
+      w.emit({ kind: "repair", icon: "🔧", minor: true, text: `${s.name} failed to fix the ${o.type}.`, simId: s.id });
+    },
   },
   {
     id: "wander", label: "Wander around", emoji: "", anim: "idle",
@@ -73,7 +88,7 @@ export const INTERACTIONS: InteractionDef[] = [
       w.emit({ kind: "social", icon: "👊", text: `${s.name} picked a fight with ${o!.name}!`, simId: s.id, at: w.placeOf(s) }),
     onComplete: ({ world: w, sim: s, other: o }) => {
       const hit = (attacker: Sim, victim: Sim, min: number, max: number) =>
-        w.rng.range(min, max) * (attacker.personality === "asshole" ? 1.3 : 1) * (w.isElder(victim) ? 1.5 : 1);
+        w.rng.range(min, max) * (attacker.personality === "asshole" ? 1.3 : 1) * (w.isElder(victim) ? 1.5 : 1) * w.danger.fightDamage;
       w.bumpRel(s, o!, { friendship: -15 });
       w.bumpRel(o!, s, { friendship: -15 });
       w.damage(o!, hit(s, o!, 10, 24), "beaten");
@@ -96,7 +111,7 @@ export const INTERACTIONS: InteractionDef[] = [
     target: "sim", tags: ["romantic", "intimate"], adultsOnly: true, needsAccept: true,
     duration: 30, gains: { social: 30, energy: -5 }, targetGains: { social: 30 }, baseDesire: 0.5,
     available: ({ world: w, sim: s, other: o }) =>
-      !w.isFamily(s, o!) && w.rel(s, o!).romance >= 50 && s.mateCooldownUntil <= w.t && o!.mateCooldownUntil <= w.t,
+      !w.isFamily(s, o!) && w.rel(s, o!).romance >= 40 && s.mateCooldownUntil <= w.t && o!.mateCooldownUntil <= w.t,
     onComplete: ({ world: w, sim: s, other: o }) => {
       w.bumpRel(s, o!, { romance: 8 });
       w.bumpRel(o!, s, { romance: 8 });
@@ -124,6 +139,18 @@ export const INTERACTIONS: InteractionDef[] = [
       s.x = action!.dest.x;
       w.kill(s, "toilet");
     },
+  },
+  {
+    id: "fatal_slip", label: "Slipping...", emoji: "😵", anim: "airborne",
+    target: "self", tags: [], duration: 14, internal: true,
+    onComplete: ({ world: w, sim: s, action }) => {
+      s.x = action!.dest.x;
+      w.kill(s, "slipped");
+    },
+  },
+  {
+    id: "slipped", label: "Slipped!", emoji: "💫", anim: "fallen",
+    target: "self", tags: [], duration: 12, internal: true,
   },
   {
     id: "extinguish", label: "Fight the fire", emoji: "💦", anim: "extinguish",

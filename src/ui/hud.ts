@@ -1,5 +1,6 @@
 import { DEATHS, epitaph } from "../data/deaths";
 import { PERSONALITIES, PERSONALITY_IDS } from "../data/personalities";
+import { CHAOS_LEVELS } from "../data/tuning";
 import type { HouseScene } from "../render/HouseScene";
 import { NEEDS, type DeathCause, type SimEvent } from "../sim/types";
 import { actionLabel } from "../sim/view";
@@ -46,6 +47,14 @@ export function mountHud(w: World, scene: HouseScene) {
     w.setStoveQuality(stove.quality === "cheap" ? "normal" : "cheap");
   };
   ($("rebuild") as HTMLButtonElement).onclick = () => w.rebuild();
+  const chaosBox = $("chaos");
+  for (const level of CHAOS_LEVELS) {
+    const b = document.createElement("button");
+    b.textContent = level.label;
+    b.dataset.chaos = level.id;
+    b.onclick = () => w.setChaos(level.id);
+    chaosBox.append(b);
+  }
 
   // event log
   const log = $("log");
@@ -63,6 +72,7 @@ export function mountHud(w: World, scene: HouseScene) {
     $("clock").textContent = `Day ${w.day} · ${clock(w.t)}`;
     $("pop").textContent = `${w.population}/${POP_CAP}`;
     for (const b of speedBox.querySelectorAll("button")) b.classList.toggle("on", Number(b.dataset.speed) === scene.speed);
+    for (const b of chaosBox.querySelectorAll("button")) b.classList.toggle("on", (b as HTMLElement).dataset.chaos === w.chaos);
     for (const b of addBox.querySelectorAll("button")) (b as HTMLButtonElement).disabled = w.population >= POP_CAP;
     const stove = w.objects.find((o) => o.type === "stove")!;
     stoveBtn.textContent = stove.quality === "cheap" ? "Stove: cheap 🔥" : "Stove: safe";

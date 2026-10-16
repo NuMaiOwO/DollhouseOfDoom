@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "simulate": "tsx scripts/simulate.ts",
-    "screenshot": "tsx scripts/screenshot.ts"
+    "screenshot": "tsx scripts/screenshot.ts",
+    "balance": "tsx scripts/balance.ts"
   },
   "dependencies": {
     "phaser": "^3.90.0"

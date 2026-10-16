@@ -10,16 +10,16 @@ export type LifeStage = "child" | "adult" | "elder";
 
 /** Interactions are described by tags; rules (personality, relationships, buffs) target tags, not interactions. */
 export type Tag =
-  | "food" | "cooking" | "rest" | "idle" | "toilet"
+  | "food" | "cooking" | "rest" | "idle" | "toilet" | "repair"
   | "social" | "friendly" | "mean" | "violent" | "romantic" | "intimate"
   | "brave";
 
 /** Named animation states. Placeholders fake them now; sprite-sheet rows map to them later. */
 export type AnimState =
   | "idle" | "walk" | "climb" | "eat" | "cook" | "sleep" | "talk" | "flirt"
-  | "fight" | "mate" | "panic" | "extinguish" | "launched" | "dead";
+  | "fight" | "mate" | "panic" | "extinguish" | "launched" | "airborne" | "fallen" | "repair" | "dead";
 
-export type DeathCause = "starved" | "burned" | "choked" | "beaten" | "old_age" | "loneliness" | "toilet";
+export type DeathCause = "starved" | "burned" | "crushed" | "slipped" | "beaten" | "old_age" | "loneliness" | "toilet";
 export type BuffId = "angry" | "grieving" | "embarrassed" | "heartbroken";
 
 export interface Buff { id: BuffId; until: number }
@@ -59,6 +59,8 @@ export interface Sim {
   generation: number;
   mateCooldownUntil: number;
   passedOut: boolean;
+  /** Puddle currently underfoot, so each crossing rolls for a slip only once. */
+  puddleId: number | null;
   /** Top options from the last autonomy decision, for the "why did they do that" inspector. */
   considered: { label: string; score: number }[];
 }
@@ -77,12 +79,14 @@ export interface HouseObject {
   burn: number;
 }
 
+export interface Puddle { id: number; x: number; floor: number; age: number; life: number }
+
 export interface Fire { id: number; x: number; floor: number; intensity: number; age: number; life: number }
 
 /** Directional: rel(A, B) is how A feels about B. */
 export interface Relationship { friendship: number; romance: number; partner: boolean }
 
-export type EventKind = "arrive" | "death" | "birth" | "fire" | "fire_out" | "destroyed" | "geyser" | "social" | "rejected" | "info";
+export type EventKind = "arrive" | "death" | "birth" | "fire" | "fire_out" | "destroyed" | "geyser" | "accident" | "repair" | "social" | "rejected" | "info";
 
 export interface SimEvent {
   kind: EventKind;
@@ -104,10 +108,9 @@ export interface Ctx {
   action?: Action;
 }
 
+/** Something that can go wrong during an interaction. Its odds live in data/tuning.ts. */
 export interface Hazard {
-  id: "fire" | "choke" | "geyser";
-  chancePerUse: number;
-  cheapMultiplier?: number;
+  id: "fire" | "crush" | "geyser";
 }
 
 export interface InteractionDef {
@@ -126,6 +129,8 @@ export interface InteractionDef {
   adultsOnly?: boolean;
   /** Social: the target gets an accept/reject roll. */
   needsAccept?: boolean;
+  /** Only offered on broken or burnt objects (repairs). */
+  targetsBroken?: boolean;
   /** Never chosen by autonomy; started by the world (passing out, fleeing...). */
   internal?: boolean;
   available?: (c: Ctx) => boolean;

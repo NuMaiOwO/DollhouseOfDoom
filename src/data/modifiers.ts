@@ -52,9 +52,10 @@ export const DESIRE_RULES: DesireRule[] = [
     multiply: (c) => (has(c, "romantic") ? 0.1 : has(c, "food") ? 0.5 : has(c, "social") ? 0.6 : 1),
   },
   {
+    // Wet yourself or get shot down: hide from everyone for a while.
     id: "embarrassed",
     applies: (c) => c.world.hasBuff(c.sim, "embarrassed"),
-    multiply: (c) => (has(c, "romantic") ? 0.2 : 1),
+    multiply: (c) => (has(c, "social") || has(c, "romantic") ? 0.1 : 1),
   },
   {
     id: "clingy-favorite",

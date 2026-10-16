@@ -74,3 +74,5 @@ h4 { margin: 10px 0 4px; font-size: 12px; text-transform: uppercase; letter-spac
 
 footer { margin-top: 12px; color: var(--dim); font-size: 12px; }
 .log li.geyser { color: #7fd3ff; }
+.log li.accident { color: #ffd54f; }
+.log li.repair { color: #b0e57c; }

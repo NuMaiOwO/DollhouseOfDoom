@@ -30,7 +30,7 @@ export const PERSONALITIES: Record<PersonalityId, PersonalityDef> = {
     blurb: "Always eating. Always cooking. Not always safely.",
     tagDesire: { food: 3, cooking: 2 },
     decay: { hunger: 1.5 },
-    hazard: { choke: 3, fire: 1.5 },
+    hazard: { fire: 1.5 },
     bravery: 0.4,
   },
   clingy: {
