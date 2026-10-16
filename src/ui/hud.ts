@@ -2,6 +2,7 @@ import { DEATHS, epitaph } from "../data/deaths";
 import { PERSONALITIES, PERSONALITY_IDS } from "../data/personalities";
 import { CHAOS_LEVELS } from "../data/tuning";
 import type { HouseScene } from "../render/HouseScene";
+import { toast } from "./dialog";
 import { NEEDS, type DeathCause, type SimEvent } from "../sim/types";
 import { actionLabel } from "../sim/view";
 import { POP_CAP, type World } from "../sim/world";
@@ -15,8 +16,29 @@ const SPEEDS = [
   { label: "8×", value: 8 },
 ];
 
+/** Quiet "Saved 10s ago" indicator next to the Save button; autosaves just pulse the icon. */
+export const saveStatus = {
+  last: 0,
+  failed: false,
+  saved(ok: boolean) {
+    saveStatus.failed = !ok;
+    if (!ok) return;
+    saveStatus.last = Date.now();
+    const icon = document.getElementById("saveicon");
+    icon?.classList.remove("pulse");
+    void icon?.offsetWidth; // restart the animation
+    icon?.classList.add("pulse");
+  },
+  text() {
+    if (saveStatus.failed) return "⚠️ Save failed (storage full?)";
+    if (!saveStatus.last) return "Not saved yet";
+    const s = Math.round((Date.now() - saveStatus.last) / 1000);
+    return s < 5 ? "Saved just now" : s < 60 ? `Saved ${s}s ago` : `Saved ${Math.floor(s / 60)} min ago`;
+  },
+};
+
 /** Plain DOM UI around the game canvas: controls, inspector, log, codex, graveyard. */
-export function mountHud(w: World, scene: HouseScene) {
+export function mountHud(w: World, scene: HouseScene, opts: { save: (() => Promise<void>) | null; openHouses: () => void }) {
   // speed
   const speedBox = $("speed");
   for (const s of SPEEDS) {
@@ -65,11 +87,24 @@ export function mountHud(w: World, scene: HouseScene) {
     log.prepend(li);
     while (log.children.length > 80) log.lastChild!.remove();
   };
+  for (const e of w.events.slice(-80)) addLine(e); // restored from a save
   w.on(addLine);
+  ($("houses") as HTMLButtonElement).onclick = () => opts.openHouses();
+  const saveBtn = $("save") as HTMLButtonElement;
+  const save = async () => {
+    if (!opts.save) return toast("Replay mode: this house isn't saved");
+    await opts.save();
+    toast(saveStatus.failed ? "⚠️ Couldn't save" : "💾 Saved ✓");
+  };
+  // No Ctrl+S on purpose: as a desktop idler, it would swallow the shortcut people meant for their work apps.
+  saveBtn.onclick = save;
 
   scene.onSelect = () => render();
   const render = () => {
     $("clock").textContent = `Day ${w.day} · ${clock(w.t)}`;
+    const status = $("savestatus");
+    status.textContent = opts.save ? saveStatus.text() : "Replay: not saved";
+    status.classList.toggle("bad", saveStatus.failed);
     $("pop").textContent = `${w.population}/${POP_CAP}`;
     for (const b of speedBox.querySelectorAll("button")) b.classList.toggle("on", Number(b.dataset.speed) === scene.speed);
     for (const b of chaosBox.querySelectorAll("button")) b.classList.toggle("on", (b as HTMLElement).dataset.chaos === w.chaos);

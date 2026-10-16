@@ -142,6 +142,26 @@ describe("simulation", () => {
   });
 });
 
+describe("save / load", () => {
+  it("a loaded game continues exactly as if it never stopped", () => {
+    for (const seed of [3, 11, 42]) {
+      const original = runWorld(seed, 1.5, ["asshole", "flirty", "foodie", "clingy", "flirty"], undefined, "chaos");
+      const loaded = World.fromSave(JSON.parse(JSON.stringify(original.toSave())));
+      for (let i = 0; i < 2 * DAY; i++) {
+        original.tick();
+        loaded.tick();
+      }
+      const later = (w: World) => JSON.stringify({ t: w.t, deaths: w.deaths, births: w.births, events: w.events.slice(-100).map((e) => e.text) });
+      expect(later(loaded)).toBe(later(original));
+    }
+  });
+
+  it("refuses saves from an incompatible version", () => {
+    const data = { ...new World(1).toSave(), version: 999 };
+    expect(() => World.fromSave(data)).toThrow();
+  });
+});
+
 describe("chaos slider", () => {
   it("calm < normal < chaos in deaths", () => {
     const deaths = (level: "calm" | "normal" | "chaos") => {

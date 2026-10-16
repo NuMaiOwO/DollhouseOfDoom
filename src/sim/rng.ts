@@ -5,6 +5,9 @@ export interface Rng {
   int(min: number, max: number): number;
   chance(p: number): boolean;
   pick<T>(items: readonly T[]): T;
+  /** Internal position, for saving and restoring. */
+  state(): number;
+  setState(state: number): void;
 }
 
 export function createRng(seed: number): Rng {
@@ -22,6 +25,8 @@ export function createRng(seed: number): Rng {
     int: (min, max) => Math.floor(min + next() * (max - min + 1)),
     chance: (p) => next() < p,
     pick: (items) => items[Math.floor(next() * items.length)],
+    state: () => a,
+    setState: (s) => { a = s >>> 0; },
   };
 }
 

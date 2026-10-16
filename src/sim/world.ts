@@ -12,6 +12,28 @@ import {
   type ObjectType, type PersonalityId, type Place, type Puddle, type Relationship, type Sim, type SimEvent,
 } from "./types";
 
+/** Bump when the save format changes incompatibly; older saves are then ignored. */
+export const SAVE_VERSION = 1;
+
+export interface SaveData {
+  version: number;
+  seed: number;
+  rngState: number;
+  t: number;
+  chaos: ChaosLevel;
+  sims: Sim[];
+  graveyard: Sim[];
+  objects: HouseObject[];
+  fires: Fire[];
+  puddles: Puddle[];
+  rels: [string, Relationship][];
+  nextId: number;
+  births: number;
+  firesStarted: number;
+  deaths: Partial<Record<DeathCause, number>>;
+  events: SimEvent[];
+}
+
 export const DAY = 1440;
 export const ADULT_AT = 900;
 export const POP_CAP = 15;
@@ -46,6 +68,51 @@ export class World {
   }
 
   get danger(): Danger { return DANGER[this.chaos]; }
+
+  // ── Save / load ───────────────────────────────────────────
+
+  /** A plain-data snapshot of everything needed to continue this exact game. */
+  toSave(): SaveData {
+    return structuredClone({
+      version: SAVE_VERSION,
+      seed: this.seed,
+      rngState: this.rng.state(),
+      t: this.t,
+      chaos: this.chaos,
+      sims: this.sims,
+      graveyard: this.graveyard,
+      objects: this.objects,
+      fires: this.fires,
+      puddles: this.puddles,
+      rels: [...this.rels],
+      nextId: this.nextId,
+      births: this.births,
+      firesStarted: this.firesStarted,
+      deaths: this.deaths,
+      events: this.events.slice(-200),
+    });
+  }
+
+  static fromSave(data: SaveData): World {
+    if (data.version !== SAVE_VERSION) throw new Error(`Save version ${data.version}, expected ${SAVE_VERSION}`);
+    const d = structuredClone(data);
+    const w = new World(d.seed);
+    w.rng.setState(d.rngState);
+    w.t = d.t;
+    w.chaos = d.chaos;
+    w.sims = d.sims;
+    w.graveyard = d.graveyard;
+    w.objects = d.objects;
+    w.fires = d.fires;
+    w.puddles = d.puddles;
+    w.rels = new Map(d.rels);
+    w.nextId = d.nextId;
+    w.births = d.births;
+    w.firesStarted = d.firesStarted;
+    w.deaths = d.deaths;
+    w.events.push(...d.events);
+    return w;
+  }
 
   get day() { return Math.floor(this.t / DAY) + 1; }
   get hour() { return Math.floor((this.t % DAY) / 60); }
