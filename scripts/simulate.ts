@@ -24,7 +24,7 @@ for (let seed = 1; seed <= runs; seed++) {
   fires += w.firesStarted;
   aliveAtEnd += w.population;
   if (w.population === 0) extinct++;
-  maxGen = Math.max(maxGen, ...[...w.sims, ...w.graveyard].map((s) => s.generation));
+  maxGen = Math.max(maxGen, ...[...w.dummies, ...w.graveyard].map((s) => s.generation));
   for (const e of w.events) interactions[e.kind] = (interactions[e.kind] ?? 0) + 1;
 }
 

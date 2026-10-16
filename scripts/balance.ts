@@ -7,7 +7,7 @@ import { DEATHS } from "../src/data/deaths";
 import type { ChaosLevel } from "../src/data/tuning";
 import { PERSONALITY_IDS } from "../src/data/personalities";
 import { DEFAULT_CAST, runWorld } from "../src/sim/scenario";
-import type { DeathCause, PersonalityId, Sim } from "../src/sim/types";
+import type { DeathCause, PersonalityId, Dummy } from "../src/sim/types";
 import { DAY, type World } from "../src/sim/world";
 
 const RUNS = 40;
@@ -40,10 +40,10 @@ function pct(want: string) {
 type Causes = Partial<Record<DeathCause, number>>;
 interface Result { minPerDeath: number; gen3: number; accidents: number; beaten: number; busyCauses: Causes; familyCauses: Causes; births: number }
 
-const deadIn = (w: World): Sim[] => [...w.graveyard, ...w.sims.filter((s) => !s.alive)];
+const deadIn = (w: World): Dummy[] => [...w.graveyard, ...w.dummies.filter((s) => !s.alive)];
 
 function measure(chaos: ChaosLevel): Result {
-  // Busy house: 8 Sims, 3 days, count deaths per real minute.
+  // Busy house: 8 Dummies, 3 days, count deaths per real minute.
   let busyDeaths = 0;
   const busyCauses: Causes = {}, familyCauses: Causes = {};
   for (let seed = 1; seed <= RUNS; seed++) {
@@ -55,7 +55,7 @@ function measure(chaos: ChaosLevel): Result {
   }
   const minPerDeath = (RUNS * 3 * REAL_MIN_PER_DAY) / busyDeaths;
 
-  // Families: default 4-Sim house over 8 days, with a new Sim moving in each morning (an active player).
+  // Families: default 4-Dummy house over 8 days, with a new Dummy moving in each morning (an active player).
   let gen3 = 0, births = 0;
   for (let seed = 1; seed <= RUNS; seed++) {
     const w = runWorld(seed, 0, DEFAULT_CAST, undefined, chaos);
@@ -64,7 +64,7 @@ function measure(chaos: ChaosLevel): Result {
       w.moveIn(w.rng.pick(PERSONALITY_IDS));
     }
     births += w.births;
-    if ([...w.sims, ...w.graveyard].some((s) => s.generation >= 3)) gen3++;
+    if ([...w.dummies, ...w.graveyard].some((s) => s.generation >= 3)) gen3++;
     for (const s of deadIn(w)) familyCauses[s.cause!] = (familyCauses[s.cause!] ?? 0) + 1;
   }
 

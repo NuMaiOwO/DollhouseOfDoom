@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Baby Lab</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧪</text></svg>" />
+  </head>
+  <body class="lab">
+    <header>
+      <h1>🧪 Baby Lab</h1>
+      <span class="hint">Click one character, then another, to pair them. Babies are matched from defaults + imported sheets.</span>
+    </header>
+    <section class="controls">
+      <div class="group">
+        <span class="cap">Babies per pair</span>
+        <select id="count"><option>4</option><option selected>8</option><option>12</option></select>
+        <span class="cap">Zoom</span>
+        <select id="zoom"><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select>
+        <span class="cap">Show</span>
+        <select id="facing"><option value="right" selected>Facing right</option><option value="left">Facing left</option><option value="back">Back</option><option value="all">All views</option></select>
+      </div>
+      <div class="group">
+        <button id="import">⬆ Import PNG sheets</button>
+        <input type="file" id="file" accept="image/png" multiple hidden />
+        <button id="guide">⬇ Template guide</button>
+        <button id="random">🎲 4 random pairs</button>
+        <button id="rerollall">🔁 Reroll all</button>
+        <button id="clear">Clear pairs</button>
+      </div>
+    </section>
+    <h2>Imported <span class="hint">(stand-in for the player's gallery)</span></h2>
+    <div id="imported" class="sheets"></div>
+    <h2>Babies kept as parents <span class="hint">(click a baby to keep it; breed it for grandkids)</span></h2>
+    <div id="kept" class="sheets"></div>
+    <details id="defaults-box" open><summary><h2>Defaults</h2></summary><div id="defaults" class="sheets"></div></details>
+    <h2>Pairs</h2>
+    <div id="pairs"></div>
+    <script type="module" src="/src/lab/lab.ts"></script>
+  </body>
+</html>

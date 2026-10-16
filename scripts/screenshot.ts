@@ -20,7 +20,7 @@ await page.goto(`http://localhost:5199/?seed=${seed}`);
 await page.waitForTimeout(2500);
 await page.screenshot({ path: `${outDir}/1-start.png` });
 
-// fast-forward, then click the first sim to open the inspector
+// fast-forward, then click the first dummy to open the inspector
 await page.keyboard.press("Digit3");
 await page.waitForTimeout(Number(process.env.FAST_FORWARD_MS ?? 6000));
 await page.keyboard.press("Space");
@@ -28,7 +28,7 @@ const canvas = page.locator("#game canvas");
 const box = (await canvas.boundingBox())!;
 const target = await page.evaluate(() => {
   const w = (window as any).world;
-  const s = w.sims.find((x: any) => x.alive);
+  const s = w.dummies.find((x: any) => x.alive);
   return s ? { x: s.x, floor: s.floor } : null;
 });
 if (target) {

@@ -28,7 +28,7 @@ export interface Climb { from: number; to: number; progress: number }
 
 export interface Action {
   interactionId: string;
-  target: { kind: "object" | "sim" | "fire" | "spot"; id: number };
+  target: { kind: "object" | "dummy" | "fire" | "spot"; id: number };
   dest: Place;
   phase: "walking" | "doing";
   elapsed: number;
@@ -38,7 +38,7 @@ export interface Action {
   passive?: boolean;
 }
 
-export interface Sim {
+export interface Dummy {
   id: number;
   name: string;
   personality: PersonalityId;
@@ -71,7 +71,7 @@ export interface HouseObject {
   x: number;
   floor: number;
   quality: "cheap" | "normal";
-  /** Sim currently using or walking to this object. */
+  /** Dummy currently using or walking to this object. */
   userId: number | null;
   destroyed: boolean;
   /** Broken but not burnt (e.g. an exploded toilet). Unusable until repaired. */
@@ -88,23 +88,23 @@ export interface Relationship { friendship: number; romance: number; partner: bo
 
 export type EventKind = "arrive" | "death" | "birth" | "fire" | "fire_out" | "destroyed" | "geyser" | "accident" | "repair" | "social" | "rejected" | "info";
 
-export interface SimEvent {
+export interface WorldEvent {
   kind: EventKind;
   t: number;
   text: string;
   icon?: string;
   minor?: boolean;
-  simId?: number;
+  dummyId?: number;
   cause?: DeathCause;
   at?: Place;
 }
 
 export interface Ctx {
   world: World;
-  sim: Sim;
+  dummy: Dummy;
   def: InteractionDef;
   object?: HouseObject;
-  other?: Sim;
+  other?: Dummy;
   action?: Action;
 }
 
@@ -118,7 +118,7 @@ export interface InteractionDef {
   label: string;
   emoji: string;
   anim: AnimState;
-  target: "object" | "sim" | "self" | "fire";
+  target: "object" | "dummy" | "self" | "fire";
   objectTypes?: ObjectType[];
   tags: Tag[];
   duration: number;
@@ -134,7 +134,7 @@ export interface InteractionDef {
   /** Never chosen by autonomy; started by the world (passing out, fleeing...). */
   internal?: boolean;
   available?: (c: Ctx) => boolean;
-  stopWhen?: (s: Sim, a: Action) => boolean;
+  stopWhen?: (s: Dummy, a: Action) => boolean;
   hazards?: Hazard[];
   onStart?: (c: Ctx) => void;
   onComplete?: (c: Ctx) => void;

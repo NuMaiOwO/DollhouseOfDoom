@@ -1,10 +1,10 @@
 import { INTERACTION_BY_ID } from "../data/interactions";
-import type { AnimState, Sim } from "./types";
+import type { AnimState, Dummy } from "./types";
 import type { World } from "./world";
 
-/** Read-only helpers the renderer and UI use to describe a Sim. */
+/** Read-only helpers the renderer and UI use to describe a Dummy. */
 
-export function simAnim(s: Sim): AnimState {
+export function dummyAnim(s: Dummy): AnimState {
   if (!s.alive) return "dead";
   if (s.climb) return "climb";
   const a = s.action;
@@ -13,7 +13,7 @@ export function simAnim(s: Sim): AnimState {
   return INTERACTION_BY_ID[a.interactionId].anim;
 }
 
-export function simThought(w: World, s: Sim): string | null {
+export function dummyThought(w: World, s: Dummy): string | null {
   if (!s.alive) return null;
   const a = s.action;
   if (a) {
@@ -30,12 +30,12 @@ export function simThought(w: World, s: Sim): string | null {
   return null;
 }
 
-export function actionLabel(w: World, s: Sim): string {
+export function actionLabel(w: World, s: Dummy): string {
   if (!s.alive) return "Dead";
   const a = s.action;
   if (!a) return "Idle";
   const def = INTERACTION_BY_ID[a.interactionId];
-  const other = a.target.kind === "sim" ? w.simById(a.target.id) : undefined;
+  const other = a.target.kind === "dummy" ? w.dummyById(a.target.id) : undefined;
   let label = def.label;
   if (other) label += a.passive ? ` (with ${other.name})` : ` with ${other.name}`;
   if (a.phase === "walking") label = `Going to: ${label}`;

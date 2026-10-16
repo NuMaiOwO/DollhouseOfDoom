@@ -101,7 +101,7 @@ export function saveSlot(id: string, w: World, thumb?: string): boolean {
   updateMeta(id, {
     day: w.day,
     population: w.population,
-    dead: w.graveyard.length + w.sims.filter((s) => !s.alive).length,
+    dead: w.graveyard.length + w.dummies.filter((s) => !s.alive).length,
     updatedAt: Date.now(),
     ...(thumb ? { thumb } : {}),
   });

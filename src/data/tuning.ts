@@ -2,7 +2,7 @@
  * Every accident number in one place, per Chaos level (the in-game slider).
  *
  * Agreed targets for NORMAL, checked by `npm run balance`:
- *   - Busy house (8 Sims): someone dies every 2–3 real minutes at 1× speed.
+ *   - Busy house (8 Dummies): someone dies every 2–3 real minutes at 1× speed.
  *   - The default house usually reaches grandkids (generation 3+), with the player moving someone in each day.
  *   - Object accidents (toilet, fridge, fire) are the top killers, ahead of beatings.
  * CHAOS is roughly NuMaiOwO's "comically frequent" values; CALM is the first prototype's.
@@ -24,7 +24,7 @@ export interface Danger {
   fatalSlip: number;
   /** Multiplier on fight damage. */
   fightDamage: number;
-  /** Chance a Sim's repair attempt works. */
+  /** Chance a Dummy's repair attempt works. */
   repairSuccess: number;
 }
 

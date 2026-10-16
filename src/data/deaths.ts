@@ -1,4 +1,4 @@
-import type { DeathCause, Sim } from "../sim/types";
+import type { DeathCause, Dummy } from "../sim/types";
 
 interface DeathInfo {
   title: string;
@@ -60,7 +60,7 @@ export const DEATHS: Record<DeathCause, DeathInfo> = {
   },
 };
 
-export function epitaph(s: Sim): string {
+export function epitaph(s: Dummy): string {
   if (!s.cause) return "";
   const list = DEATHS[s.cause].epitaphs;
   return list[s.id % list.length];

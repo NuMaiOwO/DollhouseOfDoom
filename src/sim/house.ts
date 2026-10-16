@@ -1,6 +1,6 @@
 import type { World } from "./world";
 
-/** Side-view house geometry, in sim pixels. Floor 0 is the ground floor. */
+/** Side-view house geometry, in dummy pixels. Floor 0 is the ground floor. */
 export const HOUSE_WIDTH = 800;
 export const FLOORS = 2;
 /** The ladder connecting the floors. */

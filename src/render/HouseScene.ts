@@ -1,10 +1,10 @@
 import Phaser from "phaser";
 import { PERSONALITIES } from "../data/personalities";
 import { FLOORS, HOUSE_WIDTH, LADDER_X, ROOMS } from "../sim/house";
-import type { Fire, HouseObject, Sim, SimEvent } from "../sim/types";
-import { simAnim, simThought } from "../sim/view";
+import type { Fire, HouseObject, Dummy, WorldEvent } from "../sim/types";
+import { dummyAnim, dummyThought } from "../sim/view";
 import type { World } from "../sim/world";
-import { COLORS, OBJECT_VISUALS, SIM_SIZE } from "./visuals";
+import { COLORS, OBJECT_VISUALS, DUMMY_SIZE } from "./visuals";
 
 /** Game-minutes per real second at 1× speed. */
 export const MIN_PER_SEC = 10;
@@ -18,7 +18,7 @@ export const GAME_H = ROOF_H + FLOOR_H * FLOORS + 28;
 const sx = (x: number) => MARGIN_X + x;
 const floorY = (floor: number) => ROOF_H + (FLOORS - floor) * FLOOR_H;
 
-interface SimView {
+interface DummyView {
   root: Phaser.GameObjects.Container;
   body: Phaser.GameObjects.Rectangle;
   eye: Phaser.GameObjects.Rectangle;
@@ -40,7 +40,7 @@ export class HouseScene extends Phaser.Scene {
 
   private acc = 0;
   private sky!: Phaser.GameObjects.Rectangle;
-  private sims = new Map<number, SimView>();
+  private dummies = new Map<number, DummyView>();
   private objects = new Map<number, ObjectView>();
   private fires = new Map<number, Phaser.GameObjects.Rectangle[]>();
   private water!: Phaser.GameObjects.Graphics;
@@ -81,7 +81,7 @@ export class HouseScene extends Phaser.Scene {
     for (let n = 0; this.acc >= 1 && n < 200; n++, this.acc--) this.world.tick();
 
     this.updateSky();
-    this.syncSims(dt);
+    this.syncDummies(dt);
     this.syncObjects();
     this.syncFires();
     this.drawWater();
@@ -131,32 +131,32 @@ export class HouseScene extends Phaser.Scene {
     this.sky.setFillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b));
   }
 
-  // ── Sims ──────────────────────────────────────────────────
+  // ── Dummies ──────────────────────────────────────────────────
 
-  private makeSim(s: Sim): SimView {
+  private makeDummy(s: Dummy): DummyView {
     const root = this.add.container(sx(s.x), floorY(s.floor)).setDepth(10);
-    const body = this.add.rectangle(0, 0, SIM_SIZE.adult.w, SIM_SIZE.adult.h, PERSONALITIES[s.personality].color).setOrigin(0.5, 1);
+    const body = this.add.rectangle(0, 0, DUMMY_SIZE.adult.w, DUMMY_SIZE.adult.h, PERSONALITIES[s.personality].color).setOrigin(0.5, 1);
     body.setStrokeStyle(1, 0x111111);
-    const eye = this.add.rectangle(4, -SIM_SIZE.adult.h + 7, 3, 3, 0x111111);
+    const eye = this.add.rectangle(4, -DUMMY_SIZE.adult.h + 7, 3, 3, 0x111111);
     const censor = this.add.text(0, -18, "▓▓", { fontSize: "18px", color: "#ff6fb5" }).setOrigin(0.5).setVisible(false);
-    const name = this.add.text(0, -SIM_SIZE.adult.h - 4, s.name, { fontSize: "9px", color: "#ffffff", resolution: 2 }).setOrigin(0.5, 1);
-    const thought = this.add.text(0, -SIM_SIZE.adult.h - 15, "", { fontSize: "14px", resolution: 2 }).setOrigin(0.5, 1);
+    const name = this.add.text(0, -DUMMY_SIZE.adult.h - 4, s.name, { fontSize: "9px", color: "#ffffff", resolution: 2 }).setOrigin(0.5, 1);
+    const thought = this.add.text(0, -DUMMY_SIZE.adult.h - 15, "", { fontSize: "14px", resolution: 2 }).setOrigin(0.5, 1);
     root.add([body, eye, censor, name, thought]);
     body.setInteractive({ useHandCursor: true }).on("pointerdown", () => this.select(s.id));
     return { root, body, eye, censor, name, thought };
   }
 
-  private syncSims(dt: number) {
+  private syncDummies(dt: number) {
     const w = this.world;
     const t = this.time.now / 1000;
-    for (const s of w.sims) {
-      let v = this.sims.get(s.id);
-      if (!v) this.sims.set(s.id, (v = this.makeSim(s)));
-      const anim = simAnim(s);
+    for (const s of w.dummies) {
+      let v = this.dummies.get(s.id);
+      if (!v) this.dummies.set(s.id, (v = this.makeDummy(s)));
+      const anim = dummyAnim(s);
       const child = w.stage(s) === "child";
-      const size = child ? SIM_SIZE.child : SIM_SIZE.adult;
+      const size = child ? DUMMY_SIZE.child : DUMMY_SIZE.adult;
 
-      // position: lerp toward the sim's logical spot
+      // position: lerp toward the dummy's logical spot
       let tx = sx(s.x), ty = floorY(s.floor);
       if (s.climb) ty = Phaser.Math.Linear(floorY(s.climb.from), floorY(s.climb.to), s.climb.progress);
       if (anim === "sleep" && s.action?.target.kind === "object") {
@@ -216,13 +216,13 @@ export class HouseScene extends Phaser.Scene {
         v.name.setY(-size.w - 4);
         v.thought.setY(-size.w - 15);
       }
-      const thought = simThought(w, s);
+      const thought = dummyThought(w, s);
       v.thought.setText(thought ?? "");
     }
-    // Sims that left the world (buried): float a ghost up and clean up
-    for (const [id, v] of this.sims) {
-      if (w.sims.some((s) => s.id === id)) continue;
-      this.sims.delete(id);
+    // Dummies that left the world (buried): float a ghost up and clean up
+    for (const [id, v] of this.dummies) {
+      if (w.dummies.some((s) => s.id === id)) continue;
+      this.dummies.delete(id);
       const ghost = this.add.text(v.root.x, v.root.y - 20, "👻", { fontSize: "18px" }).setOrigin(0.5).setDepth(20);
       this.tweens.add({ targets: ghost, y: ghost.y - 60, alpha: 0, duration: 2000, onComplete: () => ghost.destroy() });
       v.root.destroy();
@@ -231,14 +231,14 @@ export class HouseScene extends Phaser.Scene {
 
   // ── Toilet launch ─────────────────────────────────────────
 
-  /** 0..1 through the launch, smoothed between sim ticks. */
-  private launchProgress(s: Sim) {
+  /** 0..1 through the launch, smoothed between dummy ticks. */
+  private launchProgress(s: Dummy) {
     const a = s.action!;
     return Math.min(1, (a.elapsed + (this.speed ? this.acc : 0)) / a.duration);
   }
 
   /** Up through the roof and off-screen, a dramatic pause, then straight back down. */
-  private launchPosition(s: Sim) {
+  private launchPosition(s: Dummy) {
     const p = this.launchProgress(s);
     const ground = floorY(s.floor);
     const sky = -80;
@@ -253,7 +253,7 @@ export class HouseScene extends Phaser.Scene {
   }
 
   /** Feet out, three flips through the air, and a hard landing a little further on. */
-  private slipPosition(s: Sim) {
+  private slipPosition(s: Dummy) {
     const p = this.launchProgress(s);
     const height = 70 * Math.sin(Math.PI * Math.min(1, p * 1.15)); // up fast, slam down at the end
     return { x: Phaser.Math.Linear(sx(s.x), sx(s.action!.dest.x), p), y: floorY(s.floor) - Math.max(0, height) };
@@ -262,8 +262,8 @@ export class HouseScene extends Phaser.Scene {
   private drawWater() {
     const g = this.water.clear();
     const t = this.time.now / 1000;
-    // the jet that carries a launched Sim
-    for (const s of this.world.sims) {
+    // the jet that carries a launched Dummy
+    for (const s of this.world.dummies) {
       if (s.action?.interactionId !== "launched") continue;
       const p = this.launchProgress(s);
       if (p > 0.45) continue;
@@ -377,7 +377,7 @@ export class HouseScene extends Phaser.Scene {
 
   // ── Event popups ──────────────────────────────────────────
 
-  private popup(e: SimEvent) {
+  private popup(e: WorldEvent) {
     if (e.kind === "geyser") this.cameras.main.shake(250, 0.006);
     if (e.kind === "death" && e.cause === "crushed") this.cameras.main.shake(300, 0.012);
     if (e.kind === "death" && (e.cause === "toilet" || e.cause === "slipped")) {
@@ -388,7 +388,7 @@ export class HouseScene extends Phaser.Scene {
       }
     }
     if (e.minor || !e.icon) return;
-    const at = e.at ?? (e.simId ? this.world.simById(e.simId) : undefined);
+    const at = e.at ?? (e.dummyId ? this.world.dummyById(e.dummyId) : undefined);
     if (!at) return;
     const big = e.kind === "death" || e.kind === "birth" || e.kind === "fire";
     const txt = this.add.text(sx(at.x), floorY(at.floor) - 50, e.icon, { fontSize: big ? "26px" : "16px" }).setOrigin(0.5).setDepth(30);

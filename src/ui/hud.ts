@@ -3,7 +3,7 @@ import { PERSONALITIES, PERSONALITY_IDS } from "../data/personalities";
 import { CHAOS_LEVELS } from "../data/tuning";
 import type { HouseScene } from "../render/HouseScene";
 import { toast } from "./dialog";
-import { NEEDS, type DeathCause, type SimEvent } from "../sim/types";
+import { NEEDS, type DeathCause, type WorldEvent } from "../sim/types";
 import { actionLabel } from "../sim/view";
 import { POP_CAP, type World } from "../sim/world";
 
@@ -49,7 +49,7 @@ export function mountHud(w: World, scene: HouseScene, opts: { save: (() => Promi
     speedBox.append(b);
   }
 
-  // add sims
+  // add dummies
   const addBox = $("add");
   for (const id of PERSONALITY_IDS) {
     const p = PERSONALITIES[id];
@@ -80,7 +80,7 @@ export function mountHud(w: World, scene: HouseScene, opts: { save: (() => Promi
 
   // event log
   const log = $("log");
-  const addLine = (e: SimEvent) => {
+  const addLine = (e: WorldEvent) => {
     const li = document.createElement("li");
     li.className = `${e.kind}${e.minor ? " minor" : ""}`;
     li.innerHTML = `<span class="time">D${Math.floor(e.t / 1440) + 1} ${clock(e.t)}</span> ${esc(e.text)}`;
@@ -131,9 +131,9 @@ function bar(label: string, v: number) {
 
 function renderInspector(w: World, scene: HouseScene) {
   const box = $("inspector");
-  const s = scene.selectedId !== null ? w.simById(scene.selectedId) : undefined;
+  const s = scene.selectedId !== null ? w.dummyById(scene.selectedId) : undefined;
   if (!s) {
-    box.innerHTML = `<p class="hint">Click a Sim to inspect them.</p>`;
+    box.innerHTML = `<p class="hint">Click a Dummy to inspect them.</p>`;
     return;
   }
   const p = PERSONALITIES[s.personality];
@@ -164,7 +164,7 @@ function renderCodex(w: World) {
 }
 
 function renderGraveyard(w: World) {
-  const dead = [...w.graveyard, ...w.sims.filter((s) => !s.alive)].reverse();
+  const dead = [...w.graveyard, ...w.dummies.filter((s) => !s.alive)].reverse();
   $("graveyard").innerHTML = `<h4>Graveyard (${dead.length})</h4><ul class="list">${
     dead.slice(0, 30).map((s) =>
       `<li>🪦 <b>${esc(s.name)}</b> ${PERSONALITIES[s.personality].emoji} <span class="small">${DEATHS[s.cause!].title} · day ${(s.ageMin / 1440).toFixed(1)} old<br><i>"${esc(epitaph(s))}"</i></span></li>`,

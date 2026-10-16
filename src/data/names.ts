@@ -10,10 +10,10 @@ const NAMES = [
 const SUFFIXES = ["", " II", " III", " IV", " V", " VI", " VII", " VIII"];
 
 export function pickName(w: World): string {
-  const used = new Set([...w.sims, ...w.graveyard].map((s) => s.name));
+  const used = new Set([...w.dummies, ...w.graveyard].map((s) => s.name));
   for (const suffix of SUFFIXES) {
     const free = NAMES.map((n) => n + suffix).filter((n) => !used.has(n));
     if (free.length) return w.rng.pick(free);
   }
-  return `Sim #${w.sims.length + w.graveyard.length + 1}`;
+  return `Dummy #${w.dummies.length + w.graveyard.length + 1}`;
 }

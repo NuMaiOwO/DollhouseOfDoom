@@ -3,14 +3,14 @@ import { DESIRE_RULES } from "../data/modifiers";
 import { PERSONALITIES } from "../data/personalities";
 import { FLOORS, HOUSE_WIDTH, LADDER_X } from "./house";
 import { clamp } from "./rng";
-import { NEEDS, type Action, type Ctx, type InteractionDef, type Place, type Sim } from "./types";
+import { NEEDS, type Action, type Ctx, type InteractionDef, type Place, type Dummy } from "./types";
 import type { World } from "./world";
 
 /**
  * Every decision goes through the same stages:
  *   1. AVAILABLE  - can it happen at all?          (isAvailable)
- *   2. DESIRE     - how much does this Sim want it? (desire + DESIRE_RULES)
- *   3. ACCEPT     - does the other Sim agree?       (acceptChance, rolled on arrival)
+ *   2. DESIRE     - how much does this Dummy want it? (desire + DESIRE_RULES)
+ *   3. ACCEPT     - does the other Dummy agree?       (acceptChance, rolled on arrival)
  *   4. OUTCOME    - what changes?                   (InteractionDef.onComplete)
  */
 
@@ -18,7 +18,7 @@ const TOP_N = 3;
 
 export interface Option { ctx: Ctx; score: number }
 
-export function scoreOptions(w: World, s: Sim): Option[] {
+export function scoreOptions(w: World, s: Dummy): Option[] {
   const options: Option[] = [];
   const consider = (ctx: Ctx) => {
     if (!isAvailable(ctx)) return;
@@ -28,17 +28,17 @@ export function scoreOptions(w: World, s: Sim): Option[] {
   for (const def of INTERACTIONS) {
     if (def.internal) continue;
     if (def.target === "object") {
-      for (const object of w.objects) if (def.objectTypes?.includes(object.type)) consider({ world: w, sim: s, def, object });
-    } else if (def.target === "sim") {
-      for (const other of w.sims) if (other !== s && other.alive) consider({ world: w, sim: s, def, other });
+      for (const object of w.objects) if (def.objectTypes?.includes(object.type)) consider({ world: w, dummy: s, def, object });
+    } else if (def.target === "dummy") {
+      for (const other of w.dummies) if (other !== s && other.alive) consider({ world: w, dummy: s, def, other });
     } else {
-      consider({ world: w, sim: s, def });
+      consider({ world: w, dummy: s, def });
     }
   }
   return options.sort((a, b) => b.score - a.score);
 }
 
-export function chooseAction(w: World, s: Sim): Action | null {
+export function chooseAction(w: World, s: Dummy): Action | null {
   const top = scoreOptions(w, s).slice(0, TOP_N);
   s.considered = top.map((o) => ({ label: optionLabel(o.ctx), score: o.score }));
   if (!top.length) return null;
@@ -51,7 +51,7 @@ export function chooseAction(w: World, s: Sim): Action | null {
 // ── Stage 1: AVAILABLE ──────────────────────────────────────
 
 export function isAvailable(c: Ctx): boolean {
-  const { world: w, sim: s, def, object: o, other } = c;
+  const { world: w, dummy: s, def, object: o, other } = c;
   if (def.adultsOnly && !w.isAdult(s)) return false;
   if (o) {
     const unusable = o.destroyed || o.broken;
@@ -66,13 +66,13 @@ export function isAvailable(c: Ctx): boolean {
   return def.available ? def.available(c) : true;
 }
 
-/** Whether a Sim can be pulled into a social interaction right now. */
-export function canEngage(w: World, t: Sim): boolean {
+/** Whether a Dummy can be pulled into a social interaction right now. */
+export function canEngage(w: World, t: Dummy): boolean {
   if (!t.alive || t.passedOut || w.isAsleep(t)) return false;
   const a = t.action;
   if (!a) return true;
   if (a.passive || a.interactionId === "flee" || a.interactionId === "extinguish" || a.interactionId === "launched" || a.interactionId === "fatal_slip") return false;
-  return !(a.target.kind === "sim" && a.phase === "doing");
+  return !(a.target.kind === "dummy" && a.phase === "doing");
 }
 
 // ── Stage 2: DESIRE ─────────────────────────────────────────
@@ -81,7 +81,7 @@ export function canEngage(w: World, t: Sim): boolean {
 const urgency = (v: number) => 10 * ((100 - v) / 100) ** 2 + 0.1;
 
 export function desire(c: Ctx): number {
-  const { sim: s, def } = c;
+  const { dummy: s, def } = c;
   let score = def.baseDesire ?? 0;
   for (const k of NEEDS) {
     const g = def.gains?.[k];
@@ -99,7 +99,7 @@ export function desire(c: Ctx): number {
 
 // ── Stage 3: ACCEPT ─────────────────────────────────────────
 
-export function acceptChance(w: World, actor: Sim, target: Sim, def: InteractionDef): number {
+export function acceptChance(w: World, actor: Dummy, target: Dummy, def: InteractionDef): number {
   const r = w.rel(target, actor);
   let p = 0.55 + r.friendship / 150;
   if (def.tags.includes("romantic")) p = 0.25 + r.romance / 100 + r.friendship / 300;
@@ -135,7 +135,7 @@ function actionFor(w: World, c: Ctx): Action {
   const { def } = c;
   const base = { interactionId: def.id, phase: "walking" as const, elapsed: 0, duration: def.duration };
   if (c.object) return { ...base, target: { kind: "object", id: c.object.id }, dest: { x: c.object.x, floor: c.object.floor } };
-  if (c.other) return { ...base, target: { kind: "sim", id: c.other.id }, dest: { x: c.other.x, floor: c.other.floor } };
+  if (c.other) return { ...base, target: { kind: "dummy", id: c.other.id }, dest: { x: c.other.x, floor: c.other.floor } };
   return {
     ...base,
     duration: w.rng.int(15, 40),

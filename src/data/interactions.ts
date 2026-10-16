@@ -1,12 +1,12 @@
-import type { InteractionDef, NeedKey, ObjectType, Sim } from "../sim/types";
+import type { InteractionDef, NeedKey, ObjectType, Dummy } from "../sim/types";
 
-/** Which need an object serves. Sims are keener to repair what they need. */
+/** Which need an object serves. Dummies are keener to repair what they need. */
 export const OBJECT_NEED: Record<ObjectType, NeedKey> = {
   fridge: "hunger", stove: "hunger", toilet: "bladder", bed: "energy", couch: "energy",
 };
 
 /**
- * Everything a Sim can do. Objects and other Sims "advertise" these;
+ * Everything a Dummy can do. Objects and other Dummies "advertise" these;
  * autonomy scores them. Add a new interaction here and existing rules
  * (personalities, relationships, buffs) apply to it through its tags.
  */
@@ -45,10 +45,10 @@ export const INTERACTIONS: InteractionDef[] = [
     id: "repair", label: "Try to fix", emoji: "🔧", anim: "repair",
     target: "object", objectTypes: ["fridge", "stove", "toilet", "bed", "couch"], tags: ["repair"],
     duration: 30, baseDesire: 0.5, adultsOnly: true, targetsBroken: true,
-    onComplete: ({ world: w, sim: s, object: o }) => {
+    onComplete: ({ world: w, dummy: s, object: o }) => {
       if (!o) return;
       if (w.rng.chance(w.danger.repairSuccess)) return w.repair(o, s);
-      w.emit({ kind: "repair", icon: "🔧", minor: true, text: `${s.name} failed to fix the ${o.type}.`, simId: s.id });
+      w.emit({ kind: "repair", icon: "🔧", minor: true, text: `${s.name} failed to fix the ${o.type}.`, dummyId: s.id });
     },
   },
   {
@@ -59,9 +59,9 @@ export const INTERACTIONS: InteractionDef[] = [
   // ── Social ───────────────────────────────────────────────
   {
     id: "chat", label: "Chat", emoji: "💬", anim: "talk",
-    target: "sim", tags: ["social", "friendly"], needsAccept: true,
+    target: "dummy", tags: ["social", "friendly"], needsAccept: true,
     duration: 20, gains: { social: 25 }, targetGains: { social: 20 },
-    onComplete: ({ world: w, sim: s, other: o }) => {
+    onComplete: ({ world: w, dummy: s, other: o }) => {
       const ok = w.rng.chance(0.65 + w.rel(s, o!).friendship / 200);
       w.bumpRel(s, o!, { friendship: ok ? 6 : -4 });
       w.bumpRel(o!, s, { friendship: ok ? 5 : -4 });
@@ -69,25 +69,25 @@ export const INTERACTIONS: InteractionDef[] = [
   },
   {
     id: "insult", label: "Insult", emoji: "💢", anim: "talk",
-    target: "sim", tags: ["social", "mean"],
+    target: "dummy", tags: ["social", "mean"],
     duration: 8, gains: { social: 10 }, baseDesire: 0.8,
-    onComplete: ({ world: w, sim: s, other: o }) => {
+    onComplete: ({ world: w, dummy: s, other: o }) => {
       w.bumpRel(o!, s, { friendship: -12 });
       w.bumpRel(s, o!, { friendship: -3 });
       w.addBuff(o!, "angry", 180);
-      w.emit({ kind: "social", minor: true, icon: "💢", text: `${s.name} insulted ${o!.name}.`, simId: s.id });
+      w.emit({ kind: "social", minor: true, icon: "💢", text: `${s.name} insulted ${o!.name}.`, dummyId: s.id });
     },
   },
   {
     id: "fight", label: "Fight", emoji: "👊", anim: "fight",
-    target: "sim", tags: ["mean", "violent"], adultsOnly: true,
+    target: "dummy", tags: ["mean", "violent"], adultsOnly: true,
     duration: 15, gains: { social: 5 }, baseDesire: 0.3,
-    available: ({ world: w, sim: s, other: o }) =>
+    available: ({ world: w, dummy: s, other: o }) =>
       w.rel(s, o!).friendship <= -20 || (w.hasBuff(s, "angry") && w.rel(s, o!).friendship < 0),
-    onStart: ({ world: w, sim: s, other: o }) =>
-      w.emit({ kind: "social", icon: "👊", text: `${s.name} picked a fight with ${o!.name}!`, simId: s.id, at: w.placeOf(s) }),
-    onComplete: ({ world: w, sim: s, other: o }) => {
-      const hit = (attacker: Sim, victim: Sim, min: number, max: number) =>
+    onStart: ({ world: w, dummy: s, other: o }) =>
+      w.emit({ kind: "social", icon: "👊", text: `${s.name} picked a fight with ${o!.name}!`, dummyId: s.id, at: w.placeOf(s) }),
+    onComplete: ({ world: w, dummy: s, other: o }) => {
+      const hit = (attacker: Dummy, victim: Dummy, min: number, max: number) =>
         w.rng.range(min, max) * (attacker.personality === "asshole" ? 1.3 : 1) * (w.isElder(victim) ? 1.5 : 1) * w.danger.fightDamage;
       w.bumpRel(s, o!, { friendship: -15 });
       w.bumpRel(o!, s, { friendship: -15 });
@@ -97,10 +97,10 @@ export const INTERACTIONS: InteractionDef[] = [
   },
   {
     id: "flirt", label: "Flirt", emoji: "😘", anim: "flirt",
-    target: "sim", tags: ["social", "romantic"], adultsOnly: true, needsAccept: true,
+    target: "dummy", tags: ["social", "romantic"], adultsOnly: true, needsAccept: true,
     duration: 15, gains: { social: 20 }, targetGains: { social: 15 }, baseDesire: 0.6,
-    available: ({ world: w, sim: s, other: o }) => !w.isFamily(s, o!) && w.rel(s, o!).friendship > -20,
-    onComplete: ({ world: w, sim: s, other: o }) => {
+    available: ({ world: w, dummy: s, other: o }) => !w.isFamily(s, o!) && w.rel(s, o!).friendship > -20,
+    onComplete: ({ world: w, dummy: s, other: o }) => {
       w.bumpRel(s, o!, { romance: 10, friendship: 2 });
       w.bumpRel(o!, s, { romance: 8, friendship: 2 });
       w.checkJealousy(s, o!);
@@ -108,11 +108,11 @@ export const INTERACTIONS: InteractionDef[] = [
   },
   {
     id: "mate", label: "WooHoo", emoji: "💕", anim: "mate",
-    target: "sim", tags: ["romantic", "intimate"], adultsOnly: true, needsAccept: true,
+    target: "dummy", tags: ["romantic", "intimate"], adultsOnly: true, needsAccept: true,
     duration: 30, gains: { social: 30, energy: -5 }, targetGains: { social: 30 }, baseDesire: 0.5,
-    available: ({ world: w, sim: s, other: o }) =>
+    available: ({ world: w, dummy: s, other: o }) =>
       !w.isFamily(s, o!) && w.rel(s, o!).romance >= 40 && s.mateCooldownUntil <= w.t && o!.mateCooldownUntil <= w.t,
-    onComplete: ({ world: w, sim: s, other: o }) => {
+    onComplete: ({ world: w, dummy: s, other: o }) => {
       w.bumpRel(s, o!, { romance: 8 });
       w.bumpRel(o!, s, { romance: 8 });
       w.makePartners(s, o!);
@@ -134,7 +134,7 @@ export const INTERACTIONS: InteractionDef[] = [
   {
     id: "launched", label: "Launched by the toilet", emoji: "😱", anim: "launched",
     target: "self", tags: [], duration: 24, internal: true,
-    onComplete: ({ world: w, sim: s, action }) => {
+    onComplete: ({ world: w, dummy: s, action }) => {
       // Comes down where the launch decided (dest). Hard.
       s.x = action!.dest.x;
       w.kill(s, "toilet");
@@ -143,7 +143,7 @@ export const INTERACTIONS: InteractionDef[] = [
   {
     id: "fatal_slip", label: "Slipping...", emoji: "😵", anim: "airborne",
     target: "self", tags: [], duration: 14, internal: true,
-    onComplete: ({ world: w, sim: s, action }) => {
+    onComplete: ({ world: w, dummy: s, action }) => {
       s.x = action!.dest.x;
       w.kill(s, "slipped");
     },

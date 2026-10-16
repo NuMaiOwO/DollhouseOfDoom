@@ -66,6 +66,6 @@ mountHud(w, scene, {
     }),
 });
 
-// Handy in the browser console: world.sims, world.moveIn("asshole"), ...
+// Handy in the browser console: world.dummies, world.moveIn("asshole"), ...
 (window as unknown as { world: World }).world = w;
 console.log(`Dollhouse of Doom, seed ${w.seed}${slotId ? "" : " (replay, not saved)"}`);

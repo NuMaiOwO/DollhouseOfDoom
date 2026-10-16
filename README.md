@@ -1,6 +1,6 @@
 # Dollhouse of Doom
 
-A tiny side-view dollhouse. Drop in Sims with one extreme personality, then watch them
+A tiny side-view dollhouse. Drop in Dummies (our little not-Sims) with one extreme personality, then watch them
 eat, flirt, fight, breed, set the kitchen on fire, and die.
 
 ## Run it
@@ -16,7 +16,7 @@ npm run build        # itch.io build in dist/ (zip the contents, upload as HTML 
 npm run screenshot   # headless Edge screenshots of the running game
 ```
 
-Controls: Space pause, 1/2/3 speed, click a Sim to inspect it.
+Controls: Space pause, 1/2/3 speed, click a Dummy to inspect it.
 
 ## How it's built
 
@@ -25,7 +25,7 @@ src/sim/      pure simulation, no graphics (testable, runs headless)
   world.ts      the World: tick(), needs, actions, fire, death, birth, events
   autonomy.ts   decision stages: AVAILABLE -> DESIRE -> ACCEPT -> OUTCOME
 src/data/     the content: add features here, not in the AI code
-  interactions.ts   everything Sims can do (tags, gains, hazards, outcomes)
+  interactions.ts   everything Dummies can do (tags, gains, hazards, outcomes)
   personalities.ts  personality = bundle of tag multipliers
   modifiers.ts      desire rules (hate, love, anger, grief, decency...)
   deaths.ts         death codex entries + epitaphs
@@ -36,7 +36,7 @@ src/ui/       DOM HUD: controls, inspector, log, codex, graveyard
 ```
 
 **Changing how deadly things are:** edit `src/data/tuning.ts`, then run `npm run balance`.
-Normal must hit: a death every 2–3 real minutes in a busy (8-Sim) house, grandkids in most houses,
+Normal must hit: a death every 2–3 real minutes in a busy (8-Dummy) house, grandkids in most houses,
 and object accidents ahead of beatings.
 
 **Adding a personality:** add an entry in `personalities.ts` with tag multipliers.

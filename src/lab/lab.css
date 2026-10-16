@@ -1,0 +1,36 @@
+body.lab { max-width: none; }
+.lab .hint { color: var(--dim); font-weight: normal; text-transform: none; letter-spacing: 0; }
+.lab h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--dim); margin: 16px 0 8px; display: inline-block; }
+.lab summary { cursor: pointer; }
+.lab select { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: inherit; }
+
+canvas { image-rendering: pixelated; display: block; }
+.figure { display: flex; gap: 4px; background: repeating-conic-gradient(#232534 0% 25%, #1c1e2b 0% 50%) 50% / 12px 12px; padding: 4px; border-radius: 6px; width: max-content; }
+
+.sheets { display: flex; flex-wrap: wrap; gap: 8px; }
+.card { position: relative; border: 2px solid var(--line); border-radius: 8px; padding: 6px; cursor: pointer; background: var(--panel); }
+.card:hover { border-color: var(--dim); }
+.card.picked { border-color: #6fd3ff; box-shadow: 0 0 0 2px #6fd3ff55; }
+.card.needs-tags { border-style: dashed; }
+.card .name, .parent .name { margin-top: 4px; font-size: 12px; max-width: 150px; }
+.card .tools { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; opacity: 0; }
+.card:hover .tools { opacity: 1; }
+.card .tools button { padding: 1px 6px; font-size: 11px; }
+
+.chips { display: flex; align-items: center; gap: 3px; margin-top: 3px; }
+.chip { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #0006; display: inline-block; }
+.chip.unset { background: none; border-style: dashed; color: var(--dim); font-size: 10px; text-align: center; line-height: 12px; }
+.chip-label { font-size: 10px; color: var(--dim); width: 34px; }
+
+.pair { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+.pair-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.parents { display: flex; gap: 12px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.babies { display: flex; flex-wrap: wrap; gap: 10px; }
+.baby { cursor: pointer; border-radius: 6px; padding: 2px; }
+.baby:hover { outline: 2px solid var(--accent); }
+
+.tag-buttons { display: flex; gap: 6px; margin-bottom: 10px; }
+.tag-buttons button { display: inline-flex; align-items: center; gap: 6px; text-transform: capitalize; }
+.picker { display: flex; gap: 10px; }
+.picker canvas { cursor: crosshair; border: 1px solid var(--line); }
+.repainted { color: #ffb74d; }

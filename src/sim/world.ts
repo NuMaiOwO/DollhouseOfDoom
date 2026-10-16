@@ -9,11 +9,11 @@ import { clamp, createRng, type Rng } from "./rng";
 import {
   NEEDS,
   type Action, type BuffId, type DeathCause, type Fire, type HouseObject, type LifeStage,
-  type ObjectType, type PersonalityId, type Place, type Puddle, type Relationship, type Sim, type SimEvent,
+  type ObjectType, type PersonalityId, type Place, type Puddle, type Relationship, type Dummy, type WorldEvent,
 } from "./types";
 
 /** Bump when the save format changes incompatibly; older saves are then ignored. */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export interface SaveData {
   version: number;
@@ -21,8 +21,8 @@ export interface SaveData {
   rngState: number;
   t: number;
   chaos: ChaosLevel;
-  sims: Sim[];
-  graveyard: Sim[];
+  dummies: Dummy[];
+  graveyard: Dummy[];
   objects: HouseObject[];
   fires: Fire[];
   puddles: Puddle[];
@@ -31,7 +31,23 @@ export interface SaveData {
   births: number;
   firesStarted: number;
   deaths: Partial<Record<DeathCause, number>>;
-  events: SimEvent[];
+  events: WorldEvent[];
+}
+
+/** Upgrades older saves step by step to the current format. */
+function migrateSave(d: SaveData): SaveData {
+  // v1 → v2: the little people were renamed from "Sims" to "Dummies".
+  if (d.version === 1) {
+    const old = d as unknown as { sims: Dummy[]; events: (WorldEvent & { simId?: number })[] };
+    d.dummies = old.sims;
+    delete (d as unknown as { sims?: unknown }).sims;
+    for (const e of old.events) {
+      if (e.simId !== undefined) e.dummyId = e.simId;
+      delete e.simId;
+    }
+    d.version = 2;
+  }
+  return d;
 }
 
 export const DAY = 1440;
@@ -49,18 +65,18 @@ export class World {
   /** How accident-prone the house is (the Chaos slider). */
   chaos: ChaosLevel = "normal";
   readonly rng: Rng;
-  sims: Sim[] = [];
-  graveyard: Sim[] = [];
+  dummies: Dummy[] = [];
+  graveyard: Dummy[] = [];
   objects: HouseObject[] = [];
   fires: Fire[] = [];
   puddles: Puddle[] = [];
   births = 0;
   firesStarted = 0;
   deaths: Partial<Record<DeathCause, number>> = {};
-  readonly events: SimEvent[] = [];
+  readonly events: WorldEvent[] = [];
   private rels = new Map<string, Relationship>();
   private nextId = 1;
-  private listeners: Array<(e: SimEvent) => void> = [];
+  private listeners: Array<(e: WorldEvent) => void> = [];
 
   constructor(readonly seed: number = Date.now() % 1e9) {
     this.rng = createRng(seed);
@@ -79,7 +95,7 @@ export class World {
       rngState: this.rng.state(),
       t: this.t,
       chaos: this.chaos,
-      sims: this.sims,
+      dummies: this.dummies,
       graveyard: this.graveyard,
       objects: this.objects,
       fires: this.fires,
@@ -94,13 +110,13 @@ export class World {
   }
 
   static fromSave(data: SaveData): World {
-    if (data.version !== SAVE_VERSION) throw new Error(`Save version ${data.version}, expected ${SAVE_VERSION}`);
-    const d = structuredClone(data);
+    const d = migrateSave(structuredClone(data));
+    if (d.version !== SAVE_VERSION) throw new Error(`Save version ${d.version}, expected ${SAVE_VERSION}`);
     const w = new World(d.seed);
     w.rng.setState(d.rngState);
     w.t = d.t;
     w.chaos = d.chaos;
-    w.sims = d.sims;
+    w.dummies = d.dummies;
     w.graveyard = d.graveyard;
     w.objects = d.objects;
     w.fires = d.fires;
@@ -116,17 +132,17 @@ export class World {
 
   get day() { return Math.floor(this.t / DAY) + 1; }
   get hour() { return Math.floor((this.t % DAY) / 60); }
-  get living() { return this.sims.filter((s) => s.alive); }
+  get living() { return this.dummies.filter((s) => s.alive); }
   get population() { return this.living.length; }
 
   // ── Events ────────────────────────────────────────────────
 
-  on(fn: (e: SimEvent) => void) {
+  on(fn: (e: WorldEvent) => void) {
     this.listeners.push(fn);
     return () => { this.listeners = this.listeners.filter((l) => l !== fn); };
   }
 
-  emit(e: Omit<SimEvent, "t">) {
+  emit(e: Omit<WorldEvent, "t">) {
     const ev = { ...e, t: this.t };
     this.events.push(ev);
     if (this.events.length > 1000) this.events.shift();
@@ -141,12 +157,12 @@ export class World {
     return o;
   }
 
-  addSim(
+  addDummy(
     personality: PersonalityId,
     opts: { x?: number; floor?: number; ageMin?: number; parents?: [number, number]; generation?: number } = {},
-  ): Sim | null {
+  ): Dummy | null {
     if (this.population >= POP_CAP) return null;
-    const s: Sim = {
+    const s: Dummy = {
       id: this.nextId++,
       name: pickName(this),
       personality,
@@ -168,73 +184,73 @@ export class World {
       puddleId: null,
       considered: [],
     };
-    this.sims.push(s);
+    this.dummies.push(s);
     return s;
   }
 
   /** A new adult walks in through the front door. */
-  moveIn(personality: PersonalityId): Sim | null {
-    const s = this.addSim(personality);
-    if (s) this.emit({ kind: "arrive", icon: "🚪", text: `${s.name} the ${PERSONALITIES[personality].label} moved in.`, simId: s.id, at: this.placeOf(s) });
+  moveIn(personality: PersonalityId): Dummy | null {
+    const s = this.addDummy(personality);
+    if (s) this.emit({ kind: "arrive", icon: "🚪", text: `${s.name} the ${PERSONALITIES[personality].label} moved in.`, dummyId: s.id, at: this.placeOf(s) });
     return s;
   }
 
   // ── Lookups ───────────────────────────────────────────────
 
-  simById(id: number) { return this.sims.find((s) => s.id === id); }
+  dummyById(id: number) { return this.dummies.find((s) => s.id === id); }
   objectById(id: number) { return this.objects.find((o) => o.id === id); }
   fireById(id: number) { return this.fires.find((f) => f.id === id); }
-  placeOf(s: Sim): Place { return { x: s.x, floor: s.floor }; }
+  placeOf(s: Dummy): Place { return { x: s.x, floor: s.floor }; }
 
-  isAdult(s: Sim) { return s.ageMin >= ADULT_AT; }
-  isElder(s: Sim) { return s.ageMin >= s.lifespanMin * 0.8; }
-  stage(s: Sim): LifeStage { return !this.isAdult(s) ? "child" : this.isElder(s) ? "elder" : "adult"; }
+  isAdult(s: Dummy) { return s.ageMin >= ADULT_AT; }
+  isElder(s: Dummy) { return s.ageMin >= s.lifespanMin * 0.8; }
+  stage(s: Dummy): LifeStage { return !this.isAdult(s) ? "child" : this.isElder(s) ? "elder" : "adult"; }
 
-  isAsleep(s: Sim) {
+  isAsleep(s: Dummy) {
     const a = s.action;
     return !!a && a.phase === "doing" && INTERACTION_BY_ID[a.interactionId].anim === "sleep";
   }
 
   // ── Relationships ─────────────────────────────────────────
 
-  rel(a: Sim, b: Sim): Relationship {
+  rel(a: Dummy, b: Dummy): Relationship {
     const key = `${a.id}>${b.id}`;
     let r = this.rels.get(key);
     if (!r) this.rels.set(key, (r = { friendship: 0, romance: 0, partner: false }));
     return r;
   }
 
-  bumpRel(a: Sim, b: Sim, d: { friendship?: number; romance?: number }) {
+  bumpRel(a: Dummy, b: Dummy, d: { friendship?: number; romance?: number }) {
     const r = this.rel(a, b);
     const before = { ...r };
     r.friendship = clamp(r.friendship + (d.friendship ?? 0), -100, 100);
     r.romance = clamp(r.romance + (d.romance ?? 0), 0, 100);
     if (!a.alive || !b.alive) return;
     if (before.friendship < 50 && r.friendship >= 50)
-      this.emit({ kind: "social", icon: "🤝", text: `${a.name} now considers ${b.name} a friend.`, simId: a.id });
+      this.emit({ kind: "social", icon: "🤝", text: `${a.name} now considers ${b.name} a friend.`, dummyId: a.id });
     if (before.friendship > -30 && r.friendship <= -30)
-      this.emit({ kind: "social", icon: "😠", text: `${a.name} now hates ${b.name}.`, simId: a.id });
+      this.emit({ kind: "social", icon: "😠", text: `${a.name} now hates ${b.name}.`, dummyId: a.id });
     if (before.romance < 50 && r.romance >= 50)
-      this.emit({ kind: "social", icon: "😍", text: `${a.name} has a crush on ${b.name}.`, simId: a.id });
+      this.emit({ kind: "social", icon: "😍", text: `${a.name} has a crush on ${b.name}.`, dummyId: a.id });
   }
 
-  relationsOf(s: Sim) {
-    return [...this.sims, ...this.graveyard]
+  relationsOf(s: Dummy) {
+    return [...this.dummies, ...this.graveyard]
       .filter((o) => o !== s && this.rels.has(`${s.id}>${o.id}`))
       .map((other) => ({ other, rel: this.rel(s, other) }));
   }
 
-  isFamily(a: Sim, b: Sim) {
+  isFamily(a: Dummy, b: Dummy) {
     const pa: number[] = a.parents ?? [], pb: number[] = b.parents ?? [];
     return pa.includes(b.id) || pb.includes(a.id) || pa.some((p) => pb.includes(p));
   }
 
-  partnerOf(s: Sim) {
+  partnerOf(s: Dummy) {
     return this.living.find((o) => o !== s && this.rels.get(`${s.id}>${o.id}`)?.partner);
   }
 
-  favoriteOf(s: Sim) {
-    let best: Sim | undefined, bestScore = 10;
+  favoriteOf(s: Dummy) {
+    let best: Dummy | undefined, bestScore = 10;
     for (const o of this.living) {
       if (o === s) continue;
       const r = this.rels.get(`${s.id}>${o.id}`);
@@ -244,47 +260,47 @@ export class World {
     return best;
   }
 
-  makePartners(a: Sim, b: Sim) {
+  makePartners(a: Dummy, b: Dummy) {
     if (this.partnerOf(a) === b) return;
     for (const [s, newOne] of [[a, b], [b, a]] as const) {
       const ex = this.partnerOf(s);
       if (!ex) continue;
       this.rel(s, ex).partner = this.rel(ex, s).partner = false;
       this.addBuff(ex, "heartbroken", DAY);
-      this.emit({ kind: "social", icon: "💔", text: `${s.name} dumped ${ex.name} for ${newOne.name}.`, simId: s.id });
+      this.emit({ kind: "social", icon: "💔", text: `${s.name} dumped ${ex.name} for ${newOne.name}.`, dummyId: s.id });
     }
     this.rel(a, b).partner = this.rel(b, a).partner = true;
-    this.emit({ kind: "social", icon: "💑", text: `${a.name} and ${b.name} are now a couple.`, simId: a.id });
+    this.emit({ kind: "social", icon: "💑", text: `${a.name} and ${b.name} are now a couple.`, dummyId: a.id });
   }
 
   /** A partner who sees their other half flirting gets furious. */
-  checkJealousy(a: Sim, b: Sim) {
+  checkJealousy(a: Dummy, b: Dummy) {
     for (const [cheater, other] of [[a, b], [b, a]] as const) {
       const p = this.partnerOf(cheater);
       if (!p || p === other || this.isAsleep(p) || p.floor !== cheater.floor || Math.abs(p.x - cheater.x) > 250) continue;
       this.addBuff(p, "angry", 240);
       this.bumpRel(p, other, { friendship: -25 });
       this.bumpRel(p, cheater, { friendship: -10, romance: -15 });
-      this.emit({ kind: "social", icon: "😡", text: `${p.name} caught ${cheater.name} with ${other.name}!`, simId: p.id, at: this.placeOf(p) });
+      this.emit({ kind: "social", icon: "😡", text: `${p.name} caught ${cheater.name} with ${other.name}!`, dummyId: p.id, at: this.placeOf(p) });
     }
   }
 
   // ── Buffs, damage, death, birth ───────────────────────────
 
-  hasBuff(s: Sim, id: BuffId) { return s.buffs.some((b) => b.id === id && b.until > this.t); }
+  hasBuff(s: Dummy, id: BuffId) { return s.buffs.some((b) => b.id === id && b.until > this.t); }
 
-  addBuff(s: Sim, id: BuffId, minutes: number) {
+  addBuff(s: Dummy, id: BuffId, minutes: number) {
     s.buffs = s.buffs.filter((b) => b.id !== id);
     s.buffs.push({ id, until: this.t + minutes });
   }
 
-  damage(s: Sim, amount: number, cause: DeathCause) {
+  damage(s: Dummy, amount: number, cause: DeathCause) {
     if (!s.alive) return;
     s.health -= amount;
     if (s.health <= 0) this.kill(s, cause);
   }
 
-  kill(s: Sim, cause: DeathCause) {
+  kill(s: Dummy, cause: DeathCause) {
     if (!s.alive) return;
     this.endAction(s);
     s.alive = false;
@@ -293,7 +309,7 @@ export class World {
     s.health = 0;
     s.climb = null;
     this.deaths[cause] = (this.deaths[cause] ?? 0) + 1;
-    this.emit({ kind: "death", icon: "💀", text: `${s.name} ${DEATHS[cause].verb}`, simId: s.id, cause, at: this.placeOf(s) });
+    this.emit({ kind: "death", icon: "💀", text: `${s.name} ${DEATHS[cause].verb}`, dummyId: s.id, cause, at: this.placeOf(s) });
     for (const o of this.living) {
       const r = this.rels.get(`${o.id}>${s.id}`);
       if (!r) continue;
@@ -302,9 +318,9 @@ export class World {
     }
   }
 
-  spawnBaby(a: Sim, b: Sim): Sim | null {
+  spawnBaby(a: Dummy, b: Dummy): Dummy | null {
     const personality = this.rng.chance(0.1) ? this.rng.pick(PERSONALITY_IDS) : this.rng.pick([a.personality, b.personality]);
-    const baby = this.addSim(personality, {
+    const baby = this.addDummy(personality, {
       x: (a.x + b.x) / 2, floor: a.floor, ageMin: 0, parents: [a.id, b.id],
       generation: Math.max(a.generation, b.generation) + 1,
     });
@@ -318,18 +334,18 @@ export class World {
     this.emit({
       kind: "birth", icon: "👶",
       text: `${a.name} and ${b.name} had a baby: ${baby.name} (${PERSONALITIES[personality].label}).`,
-      simId: baby.id, at: this.placeOf(baby),
+      dummyId: baby.id, at: this.placeOf(baby),
     });
     return baby;
   }
 
   // ── Fire ──────────────────────────────────────────────────
 
-  startFire(x: number, floor: number, by?: Sim, objectType?: ObjectType) {
+  startFire(x: number, floor: number, by?: Dummy, objectType?: ObjectType) {
     if (this.fires.length >= MAX_FIRES || this.fires.some((f) => f.floor === floor && Math.abs(f.x - x) < 12)) return;
     this.fires.push({ id: this.nextId++, x, floor, intensity: 0.3, age: 0, life: this.rng.range(60, 120) });
     this.firesStarted++;
-    if (by) this.emit({ kind: "fire", icon: "🔥", text: `${by.name} set the ${objectType ?? "house"} on fire!`, simId: by.id, at: { x, floor } });
+    if (by) this.emit({ kind: "fire", icon: "🔥", text: `${by.name} set the ${objectType ?? "house"} on fire!`, dummyId: by.id, at: { x, floor } });
   }
 
   private removeFire(f: Fire) {
@@ -340,7 +356,7 @@ export class World {
   private destroyObject(o: HouseObject) {
     o.destroyed = true;
     if (o.userId !== null) {
-      const user = this.simById(o.userId);
+      const user = this.dummyById(o.userId);
       if (user) this.endAction(user);
     }
     o.userId = null;
@@ -354,12 +370,12 @@ export class World {
     if (fixed.length) this.emit({ kind: "info", icon: "🛠️", text: `Repaired or replaced ${fixed.length} object(s).` });
   }
 
-  /** A Sim managed to fix something. */
-  repair(o: HouseObject, by: Sim) {
+  /** A Dummy managed to fix something. */
+  repair(o: HouseObject, by: Dummy) {
     o.destroyed = false;
     o.broken = false;
     o.burn = 0;
-    this.emit({ kind: "repair", icon: "🛠️", text: `${by.name} actually fixed the ${o.type}!`, simId: by.id, at: { x: o.x, floor: o.floor } });
+    this.emit({ kind: "repair", icon: "🛠️", text: `${by.name} actually fixed the ${o.type}!`, dummyId: by.id, at: { x: o.x, floor: o.floor } });
   }
 
   addPuddle(x: number, floor: number) {
@@ -368,7 +384,7 @@ export class World {
   }
 
   /** Walking over a puddle: usually a slip, occasionally a fatal one. */
-  private checkSlip(s: Sim): boolean {
+  private checkSlip(s: Dummy): boolean {
     const p = this.puddles.find((p) => p.floor === s.floor && Math.abs(p.x - s.x) < 10);
     if (!p) {
       s.puddleId = null;
@@ -379,7 +395,7 @@ export class World {
     const running = s.action?.run;
     if (!this.rng.chance(Math.min(0.95, this.danger.slip * (running ? 1.5 : 1)))) return false;
     this.endAction(s);
-    this.emit({ kind: "accident", icon: "💫", minor: true, text: `${s.name} slipped in a puddle.`, simId: s.id, at: this.placeOf(s) });
+    this.emit({ kind: "accident", icon: "💫", minor: true, text: `${s.name} slipped in a puddle.`, dummyId: s.id, at: this.placeOf(s) });
     if (this.rng.chance(this.danger.fatalSlip * (this.isElder(s) ? 2.5 : 1))) {
       const landing = { x: clamp(s.x + s.facing * 34, 10, HOUSE_WIDTH - 10), floor: s.floor };
       s.action = { interactionId: "fatal_slip", target: { kind: "spot", id: 0 }, dest: landing, phase: "doing", elapsed: 0, duration: 14 };
@@ -391,15 +407,15 @@ export class World {
   }
 
   /** The fridge tips over onto whoever is raiding it. */
-  private crush(s: Sim, fridge: HouseObject) {
+  private crush(s: Dummy, fridge: HouseObject) {
     fridge.broken = true;
     fridge.userId = null;
-    this.emit({ kind: "accident", icon: "🧊", text: `The fridge fell on ${s.name}!`, simId: s.id, at: this.placeOf(s) });
+    this.emit({ kind: "accident", icon: "🧊", text: `The fridge fell on ${s.name}!`, dummyId: s.id, at: this.placeOf(s) });
     this.kill(s, "crushed");
   }
 
   /** The toilet explodes: whoever is on it (and anyone standing too close) goes through the roof. */
-  launch(s: Sim, toilet: HouseObject) {
+  launch(s: Dummy, toilet: HouseObject) {
     toilet.broken = true;
     toilet.userId = null;
     this.addPuddle(toilet.x + 20, toilet.floor);
@@ -415,7 +431,7 @@ export class World {
       v.action = { interactionId: "launched", target: { kind: "spot", id: 0 }, dest: landing, phase: "doing", elapsed: 0, duration: 24 };
     }
     const names = victims.map((v) => v.name).join(" and ");
-    this.emit({ kind: "geyser", icon: "🚽", text: `The toilet exploded and launched ${names} into the sky!`, simId: s.id, at: { x: toilet.x, floor: toilet.floor } });
+    this.emit({ kind: "geyser", icon: "🚽", text: `The toilet exploded and launched ${names} into the sky!`, dummyId: s.id, at: { x: toilet.x, floor: toilet.floor } });
   }
 
   /** Player lever: the Chaos slider. */
@@ -434,9 +450,9 @@ export class World {
 
   tick() {
     this.t++;
-    for (const s of this.sims) if (s.alive) this.updateBody(s);
-    for (const s of this.sims) if (s.alive) this.reactToFire(s);
-    for (const s of this.sims) {
+    for (const s of this.dummies) if (s.alive) this.updateBody(s);
+    for (const s of this.dummies) if (s.alive) this.reactToFire(s);
+    for (const s of this.dummies) {
       if (!s.alive) continue;
       if (s.action) this.stepAction(s);
       else this.startAction(s, chooseAction(this, s));
@@ -447,7 +463,7 @@ export class World {
     this.buryCorpses();
   }
 
-  private updateBody(s: Sim) {
+  private updateBody(s: Dummy) {
     const p = PERSONALITIES[s.personality];
     const asleep = this.isAsleep(s);
     const decay = (k: (typeof NEEDS)[number], base: number) => {
@@ -471,19 +487,19 @@ export class World {
       s.needs.bladder = 100;
       this.addBuff(s, "embarrassed", 8 * 60);
       this.addPuddle(s.x, s.climb ? s.climb.from : s.floor);
-      this.emit({ kind: "info", icon: "💦", minor: true, text: `${s.name} wet themselves.`, simId: s.id });
+      this.emit({ kind: "info", icon: "💦", minor: true, text: `${s.name} wet themselves.`, dummyId: s.id });
     }
   }
 
-  private passOut(s: Sim) {
+  private passOut(s: Dummy) {
     this.endAction(s);
     s.climb = null;
     s.passedOut = true;
     s.action = { interactionId: "passed_out", target: { kind: "spot", id: 0 }, dest: this.placeOf(s), phase: "doing", elapsed: 0, duration: 180 };
-    this.emit({ kind: "info", icon: "😵", minor: true, text: `${s.name} passed out from exhaustion.`, simId: s.id });
+    this.emit({ kind: "info", icon: "😵", minor: true, text: `${s.name} passed out from exhaustion.`, dummyId: s.id });
   }
 
-  private reactToFire(s: Sim) {
+  private reactToFire(s: Dummy) {
     if (s.climb || s.passedOut) return;
     const id = s.action?.interactionId;
     if (id === "flee" || id === "extinguish" || id === "launched" || id === "fatal_slip" || id === "slipped") return;
@@ -510,20 +526,20 @@ export class World {
     s.action = { ...run, interactionId: "flee", duration: 30, target: { kind: "spot", id: 0 }, dest };
   }
 
-  private startAction(s: Sim, a: Action | null) {
+  private startAction(s: Dummy, a: Action | null) {
     if (!a) return;
     if (a.target.kind === "object") this.objectById(a.target.id)!.userId = s.id;
     s.action = a;
   }
 
-  private stepAction(s: Sim) {
+  private stepAction(s: Dummy) {
     const a = s.action!;
     const def = INTERACTION_BY_ID[a.interactionId];
 
     if (a.phase === "walking") {
       if (++a.elapsed > 240) return this.endAction(s);
-      if (a.target.kind === "sim") {
-        const o = this.simById(a.target.id);
+      if (a.target.kind === "dummy") {
+        const o = this.dummyById(a.target.id);
         if (!o?.alive) return this.endAction(s);
         if (!o.climb) a.dest = { x: clamp(o.x + (s.x <= o.x ? -16 : 16), 0, HOUSE_WIDTH), floor: o.floor };
       }
@@ -537,9 +553,9 @@ export class World {
       if (a.elapsed >= a.duration) this.endAction(s);
       return;
     }
-    const other = a.target.kind === "sim" ? this.simById(a.target.id) : undefined;
+    const other = a.target.kind === "dummy" ? this.dummyById(a.target.id) : undefined;
     const object = a.target.kind === "object" ? this.objectById(a.target.id) : undefined;
-    if ((a.target.kind === "sim" && !other?.alive) ) return this.endAction(s);
+    if ((a.target.kind === "dummy" && !other?.alive) ) return this.endAction(s);
     if (object && (object.destroyed || object.broken) !== !!def.targetsBroken) return this.endAction(s);
 
     for (const k of NEEDS) {
@@ -570,7 +586,7 @@ export class World {
       if (!f) return this.completeAction(s);
       f.intensity -= 0.07;
       if (f.intensity <= 0) {
-        this.emit({ kind: "info", icon: "💦", minor: true, text: `${s.name} put out a fire.`, simId: s.id });
+        this.emit({ kind: "info", icon: "💦", minor: true, text: `${s.name} put out a fire.`, dummyId: s.id });
         this.removeFire(f);
         return this.completeAction(s);
       }
@@ -579,10 +595,10 @@ export class World {
     if (a.elapsed >= a.duration || def.stopWhen?.(s, a)) this.completeAction(s);
   }
 
-  private beginDoing(s: Sim) {
+  private beginDoing(s: Dummy) {
     const a = s.action!;
     const def = INTERACTION_BY_ID[a.interactionId];
-    const other = a.target.kind === "sim" ? this.simById(a.target.id) : undefined;
+    const other = a.target.kind === "dummy" ? this.dummyById(a.target.id) : undefined;
     if (other) {
       if (!other.alive || other.climb || other.floor !== s.floor || Math.abs(other.x - s.x) > 40 || !canEngage(this, other)) {
         return this.endAction(s);
@@ -591,12 +607,12 @@ export class World {
         const romantic = def.tags.includes("romantic");
         this.bumpRel(s, other, { friendship: -2 });
         if (romantic) this.addBuff(s, "embarrassed", 120);
-        this.emit({ kind: "rejected", icon: romantic ? "🙅" : "🙄", minor: true, text: `${other.name} rejected ${s.name} (${def.label}).`, simId: s.id });
+        this.emit({ kind: "rejected", icon: romantic ? "🙅" : "🙄", minor: true, text: `${other.name} rejected ${s.name} (${def.label}).`, dummyId: s.id });
         return this.endAction(s);
       }
       this.endAction(other);
       other.action = {
-        interactionId: def.id, target: { kind: "sim", id: s.id }, dest: this.placeOf(other),
+        interactionId: def.id, target: { kind: "dummy", id: s.id }, dest: this.placeOf(other),
         phase: "doing", elapsed: 0, duration: a.duration + 5, passive: true,
       };
       s.facing = other.x >= s.x ? 1 : -1;
@@ -604,20 +620,20 @@ export class World {
     }
     a.phase = "doing";
     a.elapsed = 0;
-    def.onStart?.({ world: this, sim: s, def, other, action: a, object: a.target.kind === "object" ? this.objectById(a.target.id) : undefined });
+    def.onStart?.({ world: this, dummy: s, def, other, action: a, object: a.target.kind === "object" ? this.objectById(a.target.id) : undefined });
   }
 
-  private completeAction(s: Sim) {
+  private completeAction(s: Dummy) {
     const a = s.action!;
     const def = INTERACTION_BY_ID[a.interactionId];
-    const other = a.target.kind === "sim" ? this.simById(a.target.id) : undefined;
+    const other = a.target.kind === "dummy" ? this.dummyById(a.target.id) : undefined;
     const object = a.target.kind === "object" ? this.objectById(a.target.id) : undefined;
-    def.onComplete?.({ world: this, sim: s, def, other, object, action: a });
+    def.onComplete?.({ world: this, dummy: s, def, other, object, action: a });
     this.endAction(s);
   }
 
-  /** Stop whatever the Sim is doing and release anything it held (objects, a social partner). */
-  endAction(s: Sim) {
+  /** Stop whatever the Dummy is doing and release anything it held (objects, a social partner). */
+  endAction(s: Dummy) {
     const a = s.action;
     if (!a) return;
     s.action = null;
@@ -626,14 +642,14 @@ export class World {
       const o = this.objectById(a.target.id);
       if (o?.userId === s.id) o.userId = null;
     }
-    if (a.target.kind === "sim" && a.phase === "doing") {
-      const o = this.simById(a.target.id);
-      const linked = o?.action?.target.kind === "sim" && o.action.target.id === s.id && o.action.phase === "doing";
+    if (a.target.kind === "dummy" && a.phase === "doing") {
+      const o = this.dummyById(a.target.id);
+      const linked = o?.action?.target.kind === "dummy" && o.action.target.id === s.id && o.action.phase === "doing";
       if (o && linked && (o.action!.passive || a.passive)) this.endAction(o);
     }
   }
 
-  private moveToward(s: Sim, dest: Place, speed: number): boolean {
+  private moveToward(s: Dummy, dest: Place, speed: number): boolean {
     if (s.climb) {
       s.climb.progress += (speed > WALK_SPEED ? 2 : 1) / CLIMB_MINUTES;
       if (s.climb.progress >= 1) {
@@ -679,16 +695,16 @@ export class World {
         o.burn += f.intensity;
         if (o.burn >= 50) this.destroyObject(o);
       }
-      for (const s of this.sims) {
+      for (const s of this.dummies) {
         if (s.alive && !s.climb && s.floor === f.floor && Math.abs(s.x - f.x) < 16) this.damage(s, 5 * f.intensity, "burned");
       }
     }
   }
 
   private buryCorpses() {
-    const ready = this.sims.filter((s) => !s.alive && this.t - s.diedAt! >= CORPSE_MINUTES);
+    const ready = this.dummies.filter((s) => !s.alive && this.t - s.diedAt! >= CORPSE_MINUTES);
     if (!ready.length) return;
-    this.sims = this.sims.filter((s) => !ready.includes(s));
+    this.dummies = this.dummies.filter((s) => !ready.includes(s));
     this.graveyard.push(...ready);
   }
 }

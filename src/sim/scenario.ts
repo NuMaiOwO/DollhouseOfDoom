@@ -11,7 +11,7 @@ export function runWorld(
   const w = new World(seed);
   w.chaos = chaos;
   for (const p of cast) {
-    const s = w.addSim(p)!;
+    const s = w.addDummy(p)!;
     s.x = w.rng.range(40, 760);
     s.floor = w.rng.int(0, 1);
   }

@@ -1,5 +1,7 @@
 # Roadmap
 
+The little people are called **Dummies** (not Sims). No genders: anyone can pair with anyone.
+
 **Rule: feature-complete first, content second.** Build every core system to its
 "done" bar before adding more deaths, personalities or polish. New ideas go in the
 [Parking lot](#parking-lot), not into the current milestone.
@@ -8,7 +10,7 @@
 |---|---|---|
 | 0 | Core gameplay prototype | ✅ Done: it's fun |
 | 1 | Save / load | ✅ Done |
-| 2 | Character Studio, cast library, baby blending | 🔨 Next |
+| 2 | Character Studio, character gallery, babies | 🔨 Next |
 | 3 | Build mode | ⏳ |
 | 4 | Small / big modes + desktop window | ⏳ |
 | — | **The game is "done"**: content phase starts | |
@@ -22,7 +24,7 @@ rates (`npm run balance`).
 
 ## 1. Save / load ✅
 Done when:
-- [x] The whole house survives closing and reopening (Sims, relationships, objects, fires, puddles, codex, graveyard, clock)
+- [x] The whole house survives closing and reopening (Dummies, relationships, objects, fires, puddles, codex, graveyard, clock)
 - [x] Autosaves regularly and when the page or app is closed
 - [x] Up to 5 house slots, each autosaving independently; the last played house resumes on launch
 - [x] Houses menu: thumbnail, name, day, population, deaths, last played; Play / Rename / Copy / Delete / New house
@@ -32,16 +34,25 @@ Done when:
 - [x] A loaded game continues exactly as if it had never stopped (tested)
 - [x] Old or broken saves are ignored instead of crashing
 
-## 2. Character Studio + cast library + baby blending
+## 2. Character Studio + character gallery + babies
 Done when:
-- [ ] A fixed character template with regions (hair, face, torso, legs, feet), decided **before** anyone draws
-- [ ] Pixel painter: draw on the template, pick colors, erase, clear
-- [ ] Name + personality per character; saved to a local cast library
-- [ ] Edit and delete cast members
-- [ ] "Add" moves in a random cast member (optionally: random from one personality)
-- [ ] Sims render with their drawing (transforms only: bob, spin, tip over; no per-frame art)
-- [ ] Babies inherit each region from one parent, with occasional small color mutations
-- [ ] Traits visibly carry across generations (tested)
+- [x] Sheet format decided: three 24×48 views drawn separately: facing right, facing left, back (turned away, e.g. climbing). PNG layout 72×48. No layers. Draw anything: no regions, nothing the game needs to recognize in the drawing
+- [ ] Pixel painter: draw on the sheet, pick colors, erase, clear
+- [ ] Optional mirror helpers (nothing mirrors automatically): a one-time "Copy & flip from the other side" button (asks before overwriting) and a live mirror toggle (off by default)
+- [ ] Every sheet has 3 tag colors, labeled "hair", "skin", "eyes" (just labels: a slime or a demon lord tags whatever 3 colors it likes)
+- [ ] Name + personality per character
+- [ ] **Character gallery**: the player's saved characters; browse, edit, delete
+- [ ] Import / export character sheets as PNG (draw in any pixel tool; share characters)
+- [ ] A set of default sheets (any personality), so the game works before the player draws anything
+- [ ] "Add" moves in a random character from the gallery + defaults (optionally: from one personality)
+- [ ] Dummies render with their sheet (transforms only: bob, spin, tip over; no per-frame art)
+- [ ] **Babies**: for each tag, a color somewhere between the two parents' colors (leaning toward one parent or near the middle); the baby is the sheet, from defaults + gallery, whose tags are closest
+  - The baby's **genes are the rolled colors**, not the matched sheet's tags; grandkids roll from the genes, so family colors drift smoothly even when the sprite match is rough
+  - Never a parent's own sheet; pick randomly among the 3 closest (weighted), so siblings differ
+  - Matches must be within "off by 10"; if nothing is, a default is repainted to the exact gene colors (defaults only, never player art)
+  - Matched sheets are used as drawn: no recoloring of anyone's art
+  - ~30–40 default sheets with a wide spread of tag colors, so matches stay close while the gallery is small
+- [ ] **Baby Lab** test page: pick several pairs, see a grid of babies per pair, reroll, breed babies onward (grandkids), so matching can be judged by eye
 
 ## 3. Build mode
 Done when:
@@ -50,7 +61,7 @@ Done when:
 - [ ] Place and remove ladders (more than one; floors are no longer fixed at 2)
 - [ ] Place, move and remove furniture from a catalog (fridge, stove, toilet, bed, couch), with placement rules
 - [ ] Rooms are detected from walls (names optional)
-- [ ] Sims find their way through any layout, and get stuck when there's no route (intentionally!)
+- [ ] Dummies find their way through any layout, and get stuck when there's no route (intentionally!)
 - [ ] Fire, puddles and launches work on player-built houses
 - [ ] The layout saves and loads
 - [ ] Wallpaper / floor colors (basic decorating)
@@ -70,7 +81,7 @@ Done when:
 ## Parking lot
 Ideas for the content phase. Don't start these before milestones 1–4 are done.
 
-- Sims catch fire and run around spreading it
+- Dummies catch fire and run around spreading it
 - Repairs can go wrong (electrocution, soaking)
 - Fridge has limited food; "stock the fridge" lever
 - Slow motion / camera focus on dramatic deaths
@@ -81,5 +92,5 @@ Ideas for the content phase. Don't start these before milestones 1–4 are done.
 - "While you were away" summary
 - Sound effects (death sting, bonk, sad trombone)
 - Export / import cast packs to share
-- Family tree view
+- Family tree view (the comically long kind: generations of Sasuke × Anya descendants)
 - Sprite art to replace placeholders (the visual registry is ready)

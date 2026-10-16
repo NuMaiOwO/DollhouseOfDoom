@@ -8,10 +8,10 @@ import type { AnimState, ObjectType } from "../sim/types";
 export interface Placeholder { w: number; h: number; color: number; label: string }
 export interface VisualSpec { placeholder: Placeholder; sprite: string | null }
 
-export const SIM_SIZE = { adult: { w: 16, h: 32 }, child: { w: 12, h: 22 } };
+export const DUMMY_SIZE = { adult: { w: 16, h: 32 }, child: { w: 12, h: 22 } };
 
 /** Every animation the artist needs to draw (one sprite-sheet row each). */
-export const SIM_ANIMS: AnimState[] = [
+export const DUMMY_ANIMS: AnimState[] = [
   "idle", "walk", "climb", "eat", "cook", "sleep", "talk", "flirt", "fight", "mate", "panic", "extinguish", "launched", "airborne", "fallen", "repair", "dead",
 ];
 
