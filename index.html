@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dollhouse of Doom</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏚️</text></svg>" />
+  </head>
+  <body>
+    <header>
+      <h1>Dollhouse of Doom</h1>
+      <span id="clock"></span>
+      <span class="pop">👥 <span id="pop"></span></span>
+      <div id="speed" class="group"></div>
+    </header>
+    <div id="game"></div>
+    <section class="controls">
+      <div class="group"><span class="cap">Move in:</span><span id="add"></span></div>
+      <div class="group"><span class="cap">Meddle:</span><button id="stove"></button><button id="rebuild">🛠️ Repair broken stuff</button></div>
+    </section>
+    <main>
+      <section id="inspector" class="panel"></section>
+      <section class="panel"><h4>What happened</h4><ul id="log" class="list log"></ul></section>
+      <section class="panel"><div id="codex"></div><div id="graveyard"></div></section>
+    </main>
+    <footer>Space: pause · 1/2/3: speed · click a Sim to inspect</footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

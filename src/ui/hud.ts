@@ -1,0 +1,128 @@
+import { DEATHS, epitaph } from "../data/deaths";
+import { PERSONALITIES, PERSONALITY_IDS } from "../data/personalities";
+import type { HouseScene } from "../render/HouseScene";
+import { NEEDS, type DeathCause, type SimEvent } from "../sim/types";
+import { actionLabel } from "../sim/view";
+import { POP_CAP, type World } from "../sim/world";
+
+const $ = (id: string) => document.getElementById(id)!;
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&${{ "&": "amp", "<": "lt", ">": "gt", '"': "quot" }[c]};`);
+const SPEEDS = [
+  { label: "⏸", value: 0 },
+  { label: "1×", value: 1 },
+  { label: "3×", value: 3 },
+  { label: "8×", value: 8 },
+];
+
+/** Plain DOM UI around the game canvas: controls, inspector, log, codex, graveyard. */
+export function mountHud(w: World, scene: HouseScene) {
+  // speed
+  const speedBox = $("speed");
+  for (const s of SPEEDS) {
+    const b = document.createElement("button");
+    b.textContent = s.label;
+    b.dataset.speed = String(s.value);
+    b.onclick = () => (scene.speed = s.value);
+    speedBox.append(b);
+  }
+
+  // add sims
+  const addBox = $("add");
+  for (const id of PERSONALITY_IDS) {
+    const p = PERSONALITIES[id];
+    const b = document.createElement("button");
+    b.className = "add";
+    b.innerHTML = `${p.emoji} ${p.label}`;
+    b.title = p.blurb;
+    b.style.setProperty("--c", `#${p.color.toString(16).padStart(6, "0")}`);
+    b.onclick = () => w.moveIn(id);
+    addBox.append(b);
+  }
+
+  // levers
+  const stoveBtn = $("stove") as HTMLButtonElement;
+  stoveBtn.onclick = () => {
+    const stove = w.objects.find((o) => o.type === "stove")!;
+    w.setStoveQuality(stove.quality === "cheap" ? "normal" : "cheap");
+  };
+  ($("rebuild") as HTMLButtonElement).onclick = () => w.rebuild();
+
+  // event log
+  const log = $("log");
+  const addLine = (e: SimEvent) => {
+    const li = document.createElement("li");
+    li.className = `${e.kind}${e.minor ? " minor" : ""}`;
+    li.innerHTML = `<span class="time">D${Math.floor(e.t / 1440) + 1} ${clock(e.t)}</span> ${esc(e.text)}`;
+    log.prepend(li);
+    while (log.children.length > 80) log.lastChild!.remove();
+  };
+  w.on(addLine);
+
+  scene.onSelect = () => render();
+  const render = () => {
+    $("clock").textContent = `Day ${w.day} · ${clock(w.t)}`;
+    $("pop").textContent = `${w.population}/${POP_CAP}`;
+    for (const b of speedBox.querySelectorAll("button")) b.classList.toggle("on", Number(b.dataset.speed) === scene.speed);
+    for (const b of addBox.querySelectorAll("button")) (b as HTMLButtonElement).disabled = w.population >= POP_CAP;
+    const stove = w.objects.find((o) => o.type === "stove")!;
+    stoveBtn.textContent = stove.quality === "cheap" ? "Stove: cheap 🔥" : "Stove: safe";
+    renderInspector(w, scene);
+    renderCodex(w);
+    renderGraveyard(w);
+  };
+  render();
+  setInterval(render, 250);
+}
+
+function clock(t: number) {
+  const m = t % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(Math.floor(m % 60)).padStart(2, "0")}`;
+}
+
+function bar(label: string, v: number) {
+  const hue = Math.round((v / 100) * 120);
+  return `<div class="bar"><span>${label}</span><div><i style="width:${v}%;background:hsl(${hue} 70% 45%)"></i></div></div>`;
+}
+
+function renderInspector(w: World, scene: HouseScene) {
+  const box = $("inspector");
+  const s = scene.selectedId !== null ? w.simById(scene.selectedId) : undefined;
+  if (!s) {
+    box.innerHTML = `<p class="hint">Click a Sim to inspect them.</p>`;
+    return;
+  }
+  const p = PERSONALITIES[s.personality];
+  const rels = w.relationsOf(s)
+    .filter(({ other }) => other.alive)
+    .sort((a, b) => Math.abs(b.rel.friendship) + b.rel.romance - (Math.abs(a.rel.friendship) + a.rel.romance))
+    .slice(0, 5)
+    .map(({ other, rel }) => `<li>${rel.partner ? "💑" : ""} ${esc(other.name)} <span class="num">🤝 ${Math.round(rel.friendship)} ❤️ ${Math.round(rel.romance)}</span></li>`)
+    .join("");
+  const buffs = s.buffs.map((b) => b.id).join(", ") || "none";
+  const why = s.considered.map((c) => `<li>${esc(c.label)} <span class="num">${c.score.toFixed(1)}</span></li>`).join("");
+  box.innerHTML = `
+    <h3>${p.emoji} ${esc(s.name)} <small>${p.label} · ${w.stage(s)} · gen ${s.generation}</small></h3>
+    <p class="doing">${esc(actionLabel(w, s))}</p>
+    ${bar("Health", s.health)}
+    ${NEEDS.map((k) => bar(k[0].toUpperCase() + k.slice(1), s.needs[k])).join("")}
+    <p class="small">Moods: ${buffs}</p>
+    <h4>Relationships</h4><ul class="list">${rels || "<li class='hint'>Nobody yet</li>"}</ul>
+    <h4>Last decision (top options)</h4><ul class="list">${why || "<li class='hint'>-</li>"}</ul>`;
+}
+
+function renderCodex(w: World) {
+  const causes = Object.keys(DEATHS) as DeathCause[];
+  const found = causes.filter((c) => w.deaths[c]).length;
+  $("codex").innerHTML = `<h4>Death Codex ${found}/${causes.length}</h4><ul class="list">${causes
+    .map((c) => (w.deaths[c] ? `<li>💀 ${DEATHS[c].title} <span class="num">×${w.deaths[c]}</span></li>` : `<li class="hint">??? · ${DEATHS[c].hint}</li>`))
+    .join("")}</ul>`;
+}
+
+function renderGraveyard(w: World) {
+  const dead = [...w.graveyard, ...w.sims.filter((s) => !s.alive)].reverse();
+  $("graveyard").innerHTML = `<h4>Graveyard (${dead.length})</h4><ul class="list">${
+    dead.slice(0, 30).map((s) =>
+      `<li>🪦 <b>${esc(s.name)}</b> ${PERSONALITIES[s.personality].emoji} <span class="small">${DEATHS[s.cause!].title} · day ${(s.ageMin / 1440).toFixed(1)} old<br><i>"${esc(epitaph(s))}"</i></span></li>`,
+    ).join("") || "<li class='hint'>Empty. For now.</li>"
+  }</ul>`;
+}
